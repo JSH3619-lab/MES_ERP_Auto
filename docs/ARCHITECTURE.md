@@ -28,7 +28,7 @@
    - `CommitField` 직후 `고객사PartID PopUp`이 자동으로 뜨면 메인 `ClickSearch`를 건너뛰고
      `HandleOpenPartIdPopupAsync`에서 팝업부터 처리
    - **미존재 경고/빈 결과 감지 시** 경고 `확인`(UIA 미감지 시 Enter fallback)
-     → `고객사PartID PopUp` 품목 코드에 `recoveryPart` 입력 → Enter → Enter → 해당 Part는 SKIPPED
+     → 열린 `고객사PartID PopUp`은 `취소` 버튼으로 닫고 해당 Part는 SKIPPED
 5. 결과 CSV + 완료 다이얼로그
 
 ## 창 식별 (중요)
@@ -62,4 +62,4 @@
   `FindWarningDialog`가 "UNIMES/UNIERP 제목 아님 + '존재하지' 텍스트 + 확인 버튼"으로 식별.
 - 이 경고도 top-level이 아니라 `UNIMES - UNIMES` 하위 Window로 잡힐 수 있어 하위 Window까지 탐색한다.
 - UIA 트리에 안정적으로 노출되지 않을 수 있으므로, 자동 팝업이 열려 있고 결과 행이 없으면
-  미존재로 보고 `Enter` fallback으로 경고를 닫은 뒤 기파트 키보드 복구를 수행한다.
+  미존재로 보고 `Enter` fallback으로 경고를 닫은 뒤 `고객사PartID PopUp`을 `취소`로 닫는다.

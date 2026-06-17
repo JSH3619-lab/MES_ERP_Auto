@@ -217,7 +217,7 @@ public sealed class UnimesApp
                 {
                     result.Status = "SKIPPED";
                     result.Saved = "NO";
-                    result.Message = $"품목 코드 미존재 → 경고 확인 후 기파트 키보드 복구. part='{request.PartNo}'";
+                    result.Message = $"품목 코드 미존재 → 경고 확인 후 고객사PartID 팝업 취소. part='{request.PartNo}'";
                     _logger.Info($"품목정보관리 skipped missing part. part='{request.PartNo}'");
                     results.Add(result);
                     if (_config.Workflow.StopOnFirstFailure) break;
@@ -249,7 +249,7 @@ public sealed class UnimesApp
                     {
                         result.Status = "SKIPPED";
                         result.Saved = "NO";
-                        result.Message = $"품목 코드 미존재 → 경고 확인 후 기파트 키보드 복구. part='{request.PartNo}'";
+                        result.Message = $"품목 코드 미존재 → 경고 확인 후 고객사PartID 팝업 취소. part='{request.PartNo}'";
                         _logger.Info($"품목정보관리 skipped missing part after row search. part='{request.PartNo}'");
                         results.Add(result);
                         if (_config.Workflow.StopOnFirstFailure) break;
@@ -816,9 +816,9 @@ public sealed class UnimesApp
             await Task.Delay(80);
         }
 
-        _logger.Warn($"고객사PartID 팝업에 결과가 없어 미존재로 보고 경고 확인 후 기파트로 키보드 복구합니다. part='{originalPart}'");
+        _logger.Warn($"고객사PartID 팝업에 결과가 없어 미존재로 보고 경고 확인 후 팝업을 취소합니다. part='{originalPart}'");
         await DismissMissingWarningAsync(originalPart, forceEnterFallback: true);
-        await RecoverPartIdPopupByKeyboardAsync(originalPart);
+        await CancelPartIdPopupAfterMissingAsync(originalPart);
         return true;
     }
 
@@ -863,7 +863,7 @@ public sealed class UnimesApp
 
     // 미존재 파트 처리. 조회 직후:
     //  1) '[971001] 존재하지 않습니다' 경고가 떴으면 닫는다(=미존재 확정 신호).
-    //  2) 자동으로 열린 고객사PartID 팝업에 기파트를 넣고 Enter, Enter로 정상값을 다시 선택한다.
+    //  2) 자동으로 열린 고객사PartID 팝업은 취소로 닫고 해당 Part는 건너뛴다.
     // 미존재로 처리했으면 true, 경고가 없으면(다른 원인) false.
     private async Task<bool> HandleMissingPartAsync(AutomationElement? mainWindow, string originalPart)
     {
@@ -889,9 +889,9 @@ public sealed class UnimesApp
                 return false;
             }
 
-            _logger.Warn($"고객사PartID 팝업이 열려 있어 UIA 미감지 경고로 보고 Enter 후 기파트 복구 처리합니다. part='{originalPart}'");
+            _logger.Warn($"고객사PartID 팝업이 열려 있어 UIA 미감지 경고로 보고 Enter 후 팝업 취소 처리합니다. part='{originalPart}'");
             await DismissMissingWarningAsync(originalPart, forceEnterFallback: true);
-            await RecoverPartIdPopupByKeyboardAsync(originalPart);
+            await CancelPartIdPopupAfterMissingAsync(originalPart);
             return true;
         }
 
@@ -906,7 +906,7 @@ public sealed class UnimesApp
             await Task.Delay(300);
         }
 
-        await RecoverPartIdPopupByKeyboardAsync(originalPart);
+        await CancelPartIdPopupAfterMissingAsync(originalPart);
 
         return true;
     }
@@ -964,100 +964,10 @@ public sealed class UnimesApp
         _logger.Info($"고객사PartID 팝업 [취소] 처리. part='{originalPart}'");
     }
 
-    private async Task RecoverPartIdPopupByKeyboardAsync(string originalPart)
+    private async Task CancelPartIdPopupAfterMissingAsync(string originalPart)
     {
-        var recoveryPart = _config.ItemInfo.RecoveryPart;
-        if (string.IsNullOrWhiteSpace(recoveryPart))
-        {
-            _logger.Warn("itemInfo.recoveryPart가 비어 있어 기파트 키보드 복구를 생략하고 팝업을 취소합니다.");
-            await CancelPartIdPopupAsync(originalPart);
-            return;
-        }
-
-        var popup = FindPartIdPopup()
-            ?? throw new InvalidOperationException("고객사PartID 팝업을 찾지 못해 기파트 키보드 복구를 진행할 수 없습니다.");
-
-        var productCodeEdit = FindPopupProductCodeEdit(popup)
-            ?? throw new InvalidOperationException("고객사PartID 팝업의 품목 코드 입력칸을 찾지 못했습니다.");
-
-        SetElementText(productCodeEdit, recoveryPart, "고객사PartID 팝업 품목 코드(복구)");
-        TryFocus(productCodeEdit, "고객사PartID 팝업 품목 코드(복구)");
-        await Task.Delay(300);
-
-        _logger.Info($"기파트 복구 조회 Enter 전송. recovery='{recoveryPart}'");
-        SendKeys.SendWait("{ENTER}");
-        await WaitForPartIdPopupResultAsync(recoveryPart, TimeSpan.FromMilliseconds(2000));
-        await Task.Delay(200);
-        _logger.Info($"기파트 복구 선택 Enter 전송. recovery='{recoveryPart}'");
-        SendKeys.SendWait("{ENTER}");
-        await WaitForPartIdPopupClosedAsync(TimeSpan.FromMilliseconds(1500));
-
-        if (FindPartIdPopup() is not null)
-        {
-            var refreshedPopup = FindPartIdPopup();
-            var row = refreshedPopup is null ? null : FindPopupRowByProductCode(refreshedPopup, recoveryPart);
-            if (refreshedPopup is not null && row is not null)
-            {
-                await SelectPartIdPopupRowAsync(refreshedPopup, row, recoveryPart);
-            }
-            else
-            {
-                _logger.Warn($"기파트 키보드 복구 후에도 팝업이 남아 있어 취소합니다. recovery='{recoveryPart}'");
-                await CancelPartIdPopupAsync(originalPart);
-            }
-        }
-
-        _logger.Info($"기파트 키보드 복구 완료. original='{originalPart}', recovery='{recoveryPart}'");
-    }
-
-    private async Task WaitForPartIdPopupResultAsync(string productCode, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            var popup = FindPartIdPopup();
-            if (popup is null)
-            {
-                return;
-            }
-
-            if (FindPopupRowByProductCode(popup, productCode) is not null ||
-                FindDescendants(popup, ControlType.DataItem).Any())
-            {
-                return;
-            }
-
-            await Task.Delay(100);
-        }
-    }
-
-    private async Task WaitForPartIdPopupClosedAsync(TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            if (FindPartIdPopup() is null)
-            {
-                return;
-            }
-
-            await Task.Delay(100);
-        }
-    }
-
-    private AutomationElement? FindPopupProductCodeEdit(AutomationElement popup)
-    {
-        var edits = FindDescendants(popup, ControlType.Edit).ToList();
-        return edits.FirstOrDefault(edit =>
-                   (SafeRead(() => edit.Current.AutomationId) ?? "")
-                   .Contains("txtCd", StringComparison.OrdinalIgnoreCase))
-               ?? edits.FirstOrDefault(edit =>
-                   (SafeRead(() => edit.Current.AutomationId) ?? "")
-                   .Equals("1441912", StringComparison.OrdinalIgnoreCase))
-               ?? edits.FirstOrDefault(edit =>
-                   (SafeRead(() => edit.Current.AutomationId) ?? "")
-                   .Equals("2427784", StringComparison.OrdinalIgnoreCase))
-               ?? edits.FirstOrDefault();
+        await WaitForPartIdPopupAsync(TimeSpan.FromMilliseconds(1200));
+        await CancelPartIdPopupAsync(originalPart);
     }
 
     private async Task SelectPartIdPopupRowAsync(AutomationElement popup, AutomationElement row, string part)

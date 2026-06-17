@@ -31,7 +31,7 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 - 대상 창: `Main UNIMES window: name='UNIMES - UNIMES'` ← **반드시 UNIMES**(UNIERP면 실패)
 - 조회 방식: `Search button was not found by name. 좌표 기반 fallback` ← 뜨면 툴바 조회 탐색 실패(불안정 신호)
 - 미존재 팝업:
-  - 정상: `고객사PartID 팝업 감지 → 미존재 경고창 [확인] 처리 → 기파트로 안전복구`
+  - 정상: `고객사PartID 팝업 감지 → 미존재 경고창 [확인]/Enter 처리 → 고객사PartID 팝업 [취소] 처리`
   - 실패: `고객사PartID 팝업 미감지... 현재 top-level 창: [...]` ← 이 창 목록을 분석 단서로 사용
 
 ## 시나리오별 테스트

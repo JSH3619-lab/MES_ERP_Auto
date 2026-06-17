@@ -165,10 +165,6 @@ public sealed class ItemInfoConfig
 
     [JsonPropertyName("compDefectWarehouse")]
     public string CompDefectWarehouse { get; set; } = "COMPONENT 폐기창고";
-
-    // 미존재 Part 경고 후 열린 고객사PartID 팝업에서 키보드 복구에 사용할 기등록 Part.
-    [JsonPropertyName("recoveryPart")]
-    public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
 }
 
 public sealed class PartRequest

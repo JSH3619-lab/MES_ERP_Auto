@@ -44,4 +44,3 @@
 | `menuName` | 대상 메뉴. 기본 `품목정보관리` |
 | `binManage` / `turnKey` / `assemblyIn` | 셀 목표값(Y/N) |
 | `moduleDefectWarehouse` / `compDefectWarehouse` | 분류별 불량창고 목표값 |
-| `recoveryPart` | **기파트.** 미존재 Part 경고 후 열린 `고객사PartID PopUp`에서 키보드 복구에 사용할 정상 Part. 기본 `RMRDAG58A1B-GPWRRWM7` |
