@@ -575,19 +575,48 @@ public sealed class UnimesApp
         TryExpandCombo(combo);
         if (target is not null && TrySelectListItem(target))
         {
-            _logger.Info($"Cell set via list item. column='{columnName}', '{current}'->'{targetValue}'");
-            return CellAction.Changed;
+            CommitComboEdit(columnName);
+            var updated = GetComboCurrentText(combo);
+            if (string.Equals(updated, targetValue, StringComparison.Ordinal))
+            {
+                _logger.Info($"Cell set via list item. column='{columnName}', '{current}'->'{targetValue}'");
+                return CellAction.Changed;
+            }
+
+            _logger.Warn($"List item select did not commit target value. column='{columnName}', expected='{targetValue}', actual='{updated}'");
         }
 
         if (combo.TryGetCurrentPattern(ValuePattern.Pattern, out var rawPattern) &&
             rawPattern is ValuePattern valuePattern && !valuePattern.Current.IsReadOnly)
         {
+            TryFocus(combo, $"grid cell '{columnName}'");
             valuePattern.SetValue(targetValue);
+            CommitComboEdit(columnName);
+            var updated = GetComboCurrentText(combo);
+            if (!string.Equals(updated, targetValue, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Grid cell value did not commit. column='{columnName}', expected='{targetValue}', actual='{updated}'");
+            }
+
             _logger.Info($"Cell set via ValuePattern. column='{columnName}', '{current}'->'{targetValue}'");
             return CellAction.Changed;
         }
 
         throw new InvalidOperationException($"Failed to set grid cell. column='{columnName}', target='{targetValue}'");
+    }
+
+    private void CommitComboEdit(string columnName)
+    {
+        try
+        {
+            SendKeys.SendWait("{TAB}");
+            Thread.Sleep(180);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Combo edit commit failed. column='{columnName}', reason={ex.Message}");
+        }
     }
 
     private string GetComboCurrentText(AutomationElement combo)
