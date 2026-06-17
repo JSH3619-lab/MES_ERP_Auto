@@ -25,6 +25,19 @@ public static class Program
             }
 
             var config = LoadConfig(options.ConfigPath, rootDirectory, logger);
+            if (config.Workflow.Enabled && config.Workflow.ShowWorkScopeDialog && !options.DumpOnly)
+            {
+                var scope = WorkScopeDialog.ShowDialog();
+                if (scope is null)
+                {
+                    logger.Info("Work scope selection cancelled by user.");
+                    return 0;
+                }
+
+                config.Workflow.RuntimeWorkScope = scope.Value;
+                logger.Info($"Work scope selected: {scope.Value}");
+            }
+
             if (config.Workflow.Enabled && config.Workflow.ShowPartInputDialog && !options.DumpOnly)
             {
                 logger.Info("Showing Part No input dialog before launching/attaching UNIMES.");

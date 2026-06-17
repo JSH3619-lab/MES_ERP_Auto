@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace UnimesAutomation;
 
+public enum WorkScope
+{
+    ItemInfo,
+    BinInfo,
+    Both
+}
+
 public sealed class RootConfig
 {
     [JsonPropertyName("app")]
@@ -18,6 +25,9 @@ public sealed class RootConfig
 
     [JsonPropertyName("itemInfo")]
     public ItemInfoConfig ItemInfo { get; set; } = new();
+
+    [JsonPropertyName("binInfo")]
+    public BinInfoConfig BinInfo { get; set; } = new();
 
     public static RootConfig CreateDefault()
     {
@@ -54,7 +64,8 @@ public sealed class RootConfig
                 SearchDelayMilliseconds = 1200,
                 StopOnFirstFailure = false
             },
-            ItemInfo = new ItemInfoConfig()
+            ItemInfo = new ItemInfoConfig(),
+            BinInfo = new BinInfoConfig()
         };
     }
 }
@@ -142,6 +153,12 @@ public sealed class WorkflowConfig
     [JsonPropertyName("showCompletionDialog")]
     public bool ShowCompletionDialog { get; set; } = true;
 
+    [JsonPropertyName("showWorkScopeDialog")]
+    public bool ShowWorkScopeDialog { get; set; } = true;
+
+    [JsonIgnore]
+    public WorkScope RuntimeWorkScope { get; set; } = WorkScope.ItemInfo;
+
     [JsonIgnore]
     public List<PartRequest> RuntimePartRequests { get; set; } = [];
 }
@@ -165,6 +182,34 @@ public sealed class ItemInfoConfig
 
     [JsonPropertyName("compDefectWarehouse")]
     public string CompDefectWarehouse { get; set; } = "COMPONENT 폐기창고";
+
+    // 미존재 Part 경고 후 열린 고객사PartID 팝업에서 키보드 복구에 사용할 기등록 Part.
+    [JsonPropertyName("recoveryPart")]
+    public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
+}
+
+public sealed class BinInfoConfig
+{
+    [JsonPropertyName("menuName")]
+    public string MenuName { get; set; } = "품목별 BIN 정보 관리";
+
+    [JsonPropertyName("moduleProcessKey")]
+    public string ModuleProcessKey { get; set; } = "M050";
+
+    [JsonPropertyName("compProcessKey")]
+    public string CompProcessKey { get; set; } = "C010";
+
+    [JsonPropertyName("binType")]
+    public string BinType { get; set; } = "Normal-1";
+
+    [JsonPropertyName("retestNo")]
+    public string RetestNo { get; set; } = "0";
+
+    [JsonPropertyName("binComplete")]
+    public string BinComplete { get; set; } = "Y";
+
+    [JsonPropertyName("retestTh")]
+    public string RetestTh { get; set; } = "H";
 }
 
 public sealed class PartRequest

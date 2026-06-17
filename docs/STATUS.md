@@ -1,6 +1,6 @@
 # 진행 상황 / 변경 이력 / 미해결 원인 (상세)
 
-작업 재개 시 이 문서부터 읽을 것. (최종 갱신: 2026-06-17, 미존재 Part 팝업 취소 흐름 전환 직후)
+작업 재개 시 이 문서부터 읽을 것. (최종 갱신: 2026-06-17, 조회 속도 캐싱 + 미존재 파트 기파트 복구 재전환 직후)
 
 ---
 
@@ -10,15 +10,42 @@
 |---|---|---|
 | 1 | ERP 창 잡힘 | ✅ 해결·검증됨 |
 | 2 | attach 시 포커스(직접 클릭 필요) | 🟡 견고화 구현, 단독 검증은 못 함(3에 막힘) |
-| 3 | 미존재 파트 → MES 멈춤(응답없음) | 🟡 **경고 확인 후 고객사PartID 팝업 취소로 전환, 실 MES 검증 필요** |
+| 3 | 미존재 파트 → MES 멈춤(응답없음) | 🟡 **팝업 취소 → 기파트 팝업-내부 복구로 재전환(전체조회 회피), 실 MES 검증 필요** |
 | 4 | 시작/attach 후 CMD 정지 | 🟡 **원인 후보 확인 후 수정, 다음 실행 검증 필요** |
 | 5 | attach 상태에서 F3 메뉴 진입 실패 후 엉뚱한 입력 | 🟡 **메뉴찾기 버튼 우선 + 3회 재시도 + 실패 시 중단으로 수정, 실 MES 검증 필요** |
 | 6 | 미존재 복구 후 정상 Part 조회 뒤 진행 없음 | 🟡 **정상 Part 단계 로그 추가 + 그리드 탐색 범위 축소, 실 MES 검증 필요** |
+| 7 | 불량창고 룩업 콤보만 값 미설정 | ✅ **키보드 드롭다운 선택으로 해결·검증됨(사용자 확인)** |
+| 8 | 조회까지 Part당 ~8초 | 🟡 **stable 컨트롤 루프 밖 캐싱 + 팝업 폴링 700ms로 단축, 다중 Part 실측 필요** |
 | — | 툴바 조회 버튼 탐색 | ✅ automation_id 보강(정상 발사 확인) |
 
 ---
 
 ## 다음 세션 시작 시 바로 할 일
+
+0. BIN 자동화 최신 상태(2026-06-17 12:xx)
+   - 공정명 팝업 덤프: `logs/ui_dump_20260617_121738.txt`
+     - 창 이름 `Undefined`, 검색 라벨 `Segment ID`, 입력 Edit는 라벨 우측 첫 Edit.
+     - 결과 행은 `DataItem`, `공정ID`/`공정명` Edit 컬럼. `C010` → `Component Test1`, `M050` → `제품 실장 Test`.
+   - BIN ID 팝업 덤프: `logs/ui_dump_20260617_121758.txt`
+     - 창 이름 `BINID Popup`, 검색 라벨 `BINID`, 결과 행은 `DataItem`, `BIN ID`/`BIN Name` Edit 컬럼.
+   - 품목별 BIN 정보 관리의 `품목 ID` 입력칸은 `uniOpenPopup1` 내부 `Edit automation_id=2953814` 또는 `FindEditNextToLabel("품목 ID")`.
+   - `RunBinInfoWorkflowAsync` stub은 실제 흐름으로 교체됨:
+     - 품목 ID 조회 → 900014 경고 확인 → 행추가 → 공정명 팝업 정확 선택 → 고정 셀 입력 → BIN ID 팝업 정확 선택 → 저장 게이트.
+     - 공정명/BIN ID 셀의 검색 버튼은 별도 `Button`으로 안정 노출되지 않아 셀 우측 끝 좌표 클릭으로 팝업을 연다.
+   - 검증 완료: `dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj`, `dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj` 통과.
+   - 남은 일: live MES에서 BIN-only dryRun으로 `공정명 선택 완료`, `BIN ID 선택 완료`, `BIN 저장 게이트로 저장 생략` 로그 순서를 확인한다.
+   - 13:51 live dryRun에서 기존 등록 Part(`RMRDAG58A1B-GPWRRWM7`) 조회 후 멈춤:
+     - 원인: 기존 4행이 있어서 900014가 안 뜨는데, `ConfirmNoDataPopupAsync`가 전체 창 descendants에서 경고를 찾다가 블록됨.
+     - 수정: 조회 후 같은 Part의 기존 BIN 행이 있으면 `BIN 기존 등록 행 발견...` 로그 후 신규 행추가 없이 skip. 900014 탐색도 작은 팝업 후보/direct child window만 보는 fast path로 축소.
+     - 속도 수정: BIN `품목 ID` 입력칸/조회 버튼 캐시를 Part loop 밖으로 이동, BIN PartID 팝업 확인은 descendants 전체 스캔 대신 direct child/top-level fast check로 변경.
+   - 판단 기준 정정:
+     - `품목 존재 여부`와 `BIN 정보 존재 여부`는 별개다.
+     - BIN-only에서는 메인 조회 전 `품목 ID` 옆 검색 팝업(`Undefined`, `품목 코드`)으로 품목을 검색·선택한다.
+     - 이 품목 검색 팝업은 UIA로 결과 행/버튼을 깊게 찾지 않고 키보드 흐름으로 처리한다:
+       `Ctrl+A → Part 입력 → Enter(조회) → [971001]이면 확인만 닫고 검색 팝업은 유지한 채 다음 Part 입력, 결과가 있으면 Enter(확인)`.
+     - `[971001]품목 코드 이(가) 존재하지 않습니다.`가 뜨면 해당 Part만 skip하고, 남아 있는 검색 팝업에서 다음 Part를 이어서 검색한다.
+     - 품목정보관리+BIN(`Both`)에서는 품목정보관리에서 이미 미존재 Part를 걸러낸 `validParts`만 BIN으로 넘기므로, BIN 화면의 품목 검색 팝업은 띄우지 않고 직접 입력한다.
+     - 품목이 존재하는데 메인 조회 후 900014/행 없음이면 정상 신규 BIN 등록 대상으로 보고 행추가를 진행한다.
 
 1. 최신 코드로 한 번 실행한다.
    - MES 켜진 상태 attach/auto attach 모두에서 로그가 아래 순서로 진행되는지 확인:
@@ -43,6 +70,65 @@
      - `품목정보관리 no change` 또는 `품목정보관리 dryRun`
      - 미존재 Part는 `SKIPPED`
      - 다음 정상 Part 검색 진행
+
+## 2026-06-17 조회 속도 캐싱 + 미존재 파트 기파트 복구 재전환
+
+### 배경 (사용자 확인)
+- 불량창고 키보드 드롭다운 선택은 **정상 동작 확인**(✅). 4~5개 Part 동시 처리도 정상.
+- 두 가지 요청:
+  1. 품목명 입력→조회까지 Part당 ~8.5초가 너무 길다 → 1~2초로.
+  2. 팝업 취소 흐름이 트리거 불명으로 **전체조회가 나갈 때가 있어** 기파트 입력 복구로 되돌린다.
+
+### 수정 1 — 조회 속도 (`UnimesApp.RunItemInfoWorkflowAsync`)
+- 원인: Part마다 `FindItemInfoWindow`/`FindEditNextToLabel`(label+Edit 전체)/`ClickSearch`(Button 전체) 등
+  **UIA 전체 descendants 탐색을 4~5회** 반복. 거대한 MES 창에서 회당 수초 → 합산 ~8초.
+- `품목명` 입력칸·`조회` 버튼·`품목정보관리` 자식 창은 Part가 바뀌어도 동일하므로 **루프 밖에서 한 번만 찾아 재사용**.
+  - `IsElementUsable`로 stale 시에만 재탐색(`ElementNotAvailableException` 가드).
+  - 그리드 행 탐색 전 창 재탐색(중복 2회)도 제거. 그리드 내용은 `FindGridRowByProductId`가 매번 새로 읽으므로 영향 없음.
+- 미존재 팝업 폴링 `WaitForPartIdPopupAsync` 1200ms → **700ms**(팝업은 Tab 직후 빠르게 뜸).
+- 기대: 2번째 Part부터 품목명→조회 구간이 ~1~1.5초. (1번째 Part는 cold 탐색 1회라 다소 김.)
+
+### 수정 2 — 미존재 파트: 팝업 취소 → 기파트 팝업-내부 복구 (커밋 04f7cd3 되돌림)
+- `RecoverPartIdPopupByKeyboardAsync`(+`WaitForPartIdPopupResultAsync`/`WaitForPartIdPopupClosedAsync`/`FindPopupProductCodeEdit`) 복원.
+  - 경고 닫은 뒤 **열린 `고객사PartID PopUp`의 품목 코드칸에 `recoveryPart`(기파트) 입력 → Enter(조회) → Enter(선택)**.
+  - **메인 화면 재조회를 하지 않으므로** 전체조회 트리거를 피한다(STATUS의 "복구는 메인이 아니라 팝업 안에서" 원칙).
+  - 원래 미존재 Part는 그대로 `SKIPPED`.
+- `CancelPartIdPopupAfterMissingAsync`는 제거(3개 호출부 모두 복구로 전환). `itemInfo.recoveryPart` 재도입(기본 `RMRDAG58A1B-GPWRRWM7`).
+- 빌드: 경고 0 / 오류 0.
+
+### 검증 필요 (다음 실행)
+- 다중 Part(정상 4~5개 + 미존재 1개)로 `run_unimes_automation_save_test.cmd`.
+- 속도: `part started`→`조회 실행` 간격이 2번째 Part부터 ~1~1.5초인지.
+- 미존재: `기파트 복구 조회 Enter 전송`→`기파트 키보드 복구 완료` 로그가 뜨고 전체조회/멈춤이 없는지.
+
+## 2026-06-17 불량창고만 값 미설정 — 키보드 드롭다운 선택 (✅ 사용자 확인 완료)
+
+### 증상
+- BIN 관리/Turn Key/조립입고는 정상 저장되는데 **불량창고만 빈 값**으로 남았다.
+- `5de5973`(commit-후-검증) 적용 후 [run_20260617_093508.log](../logs/run_20260617_093508.log)에서
+  `Grid cell value did not commit. column='불량창고', expected='제품 폐기창고', actual=''` 로 드러남.
+  - 직전 [run_20260617_093100.log](../logs/run_20260617_093100.log)는 검증이 없어 `ValuePattern`이 성공으로 찍혔지만 실제로는 빈 값이었다.
+
+### 원인 (UI 덤프로 확정)
+- [ui_dump_iteminfo_..._093508.txt](../logs/ui_dump_iteminfo_RMRDAG58A1P-GPWRRWM7_20260617_093508.txt) 기준:
+  - BIN 관리 콤보: `text_value='ValuePattern:Y'`, ListItem 자식 없음 → Y/N을 ValuePattern에 직접 저장. `SetValue` 통함.
+  - 불량창고 콤보(`automation_id='12'`, 컬럼 `BadStorageID` 바인딩): `text_value='ValuePattern:'`(빈값),
+    자식이 `[Editor] [valuelist] ValueListItem 0~4` 룩업 항목(0:'', 1:COMPONENT 폐기창고, 2:DIE 폐기창고, 3:RMA창고, 4:제품 폐기창고).
+- 즉 **표시텍스트→내부 ID 매핑 룩업 콤보**라 표시텍스트를 `ValuePattern.SetValue`로 넣으면 커밋 시 빈 값으로 버려진다.
+  `SelectionItemPattern.Select`/`InvokePattern.Invoke`도 미지원이라 기존 3경로가 전부 막혔다.
+
+### 수정 (`UnimesApp.cs`)
+- `ApplyComboCell`에 키보드 선택 경로 추가: list-item Select 실패 후 `ValuePattern` 폴백 **전에** `TrySelectComboByKeyboard` 시도.
+  - `EnsureComboExpanded`로 드롭다운 열고(ExpandCollapse 우선, 실패 시 Alt+Down),
+    `{UP}`×항목수로 맨 위 고정 후 `{DOWN}`×타깃인덱스로 이동, `{ENTER}`로 선택.
+  - 한글 항목은 SendKeys 타이핑이 IME로 불안정해 **인덱스 이동 방식**을 쓴다.
+- ListItem이 없는 Y/N 콤보(`target==null`)는 이 경로를 타지 않으므로 기존 정상 동작 그대로.
+- 빌드: 경고 0 / 오류 0.
+
+### 검증 필요 (다음 실행)
+- `run_unimes_automation_save_test.cmd`로 1건 저장 테스트.
+- 기대 로그: `Keyboard combo navigation done. column='불량창고', index=4, items=5` → `Cell set via keyboard ... '제품 폐기창고'`.
+- 실패 시: `Keyboard select did not commit ... actual='...'` 의 actual 값으로 다음 가설(드롭다운 미오픈/인덱스/Tab 커밋 필요 여부)을 판단한다.
 
 ## 2026-06-17 추가 확인: 미존재 복구 후 정상 Part 조회 뒤 진행 없음
 

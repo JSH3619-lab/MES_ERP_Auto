@@ -123,14 +123,29 @@ public sealed class UnimesApp
 
         if (_config.Workflow.Enabled)
         {
-            await RunItemInfoWorkflowAsync(mainWindow);
+            var scope = _config.Workflow.RuntimeWorkScope;
+            List<PartRequest> binParts = _config.Workflow.RuntimePartRequests.ToList();
+
+            if (scope == WorkScope.ItemInfo || scope == WorkScope.Both)
+            {
+                var valid = await RunItemInfoWorkflowAsync(mainWindow);
+                if (scope == WorkScope.Both)
+                {
+                    binParts = valid;
+                }
+            }
+
+            if (scope == WorkScope.BinInfo || scope == WorkScope.Both)
+            {
+                await RunBinInfoWorkflowAsync(mainWindow, binParts);
+            }
         }
 
         _logger.Info("Bootstrap completed.");
         return 0;
     }
 
-    private async Task RunItemInfoWorkflowAsync(AutomationElement mainWindow)
+    private async Task<List<PartRequest>> RunItemInfoWorkflowAsync(AutomationElement mainWindow)
     {
         var inputPath = "";
         IReadOnlyList<PartRequest> requests;
@@ -148,7 +163,7 @@ public sealed class UnimesApp
         if (requests.Count == 0)
         {
             _logger.Warn($"No Part No entries found. input='{inputPath}'");
-            return;
+            return [];
         }
 
         _logger.Info($"품목정보관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -169,6 +184,12 @@ public sealed class UnimesApp
         await NavigateToMenuByF3Async(mainWindow, _config.ItemInfo.MenuName);
 
         var results = new List<PartResult>();
+        var validParts = new List<PartRequest>();
+        // 품목명 입력칸·조회 버튼·품목정보관리 자식 창은 Part가 바뀌어도 동일하다.
+        // UIA 전체 탐색이 느려 Part마다 다시 찾으면 조회까지 8초+ 걸리므로 한 번만 찾아 재사용한다.
+        AutomationElement itemInfoWindow = FindItemInfoWindow(mainWindow) ?? mainWindow;
+        AutomationElement? partNameEdit = null;
+        AutomationElement? searchButton = null;
         foreach (var request in requests)
         {
             var classification = PartClassifier.Classify(request.PartNo);
@@ -195,8 +216,16 @@ public sealed class UnimesApp
                 _logger.Info($"품목정보관리 part started. part='{request.PartNo}', class={classification}");
                 BringToFront(mainWindow);
 
-                var itemInfoWindow = FindItemInfoWindow(mainWindow) ?? mainWindow;
-                var partNameEdit = FindEditNextToLabel(itemInfoWindow, "품목명");
+                if (!IsElementUsable(itemInfoWindow))
+                {
+                    itemInfoWindow = FindItemInfoWindow(mainWindow) ?? mainWindow;
+                }
+
+                if (!IsElementUsable(partNameEdit))
+                {
+                    partNameEdit = FindEditNextToLabel(itemInfoWindow, "품목명");
+                }
+
                 if (partNameEdit is null)
                 {
                     _screenshots.CaptureElement(itemInfoWindow, $"item_info_part_name_not_found_{request.PartNo}");
@@ -217,26 +246,38 @@ public sealed class UnimesApp
                 {
                     result.Status = "SKIPPED";
                     result.Saved = "NO";
-                    result.Message = $"품목 코드 미존재 → 경고 확인 후 고객사PartID 팝업 취소. part='{request.PartNo}'";
+                    result.Message = $"품목 코드 미존재 → 경고 확인 후 기파트 키보드 복구. part='{request.PartNo}'";
                     _logger.Info($"품목정보관리 skipped missing part. part='{request.PartNo}'");
                     results.Add(result);
                     if (_config.Workflow.StopOnFirstFailure) break;
                     continue;
                 }
 
-                ClickSearch(mainWindow);
+                if (!IsElementUsable(searchButton))
+                {
+                    searchButton = FindSearchButton(mainWindow);
+                }
+
+                if (searchButton is not null)
+                {
+                    ClickElement(searchButton, "search query");
+                }
+                else
+                {
+                    _logger.Warn("Search button was not found by name/id. 좌표 기반 fallback 사용: toolbar search icon.");
+                    ClickToolbarSearchFallback(mainWindow);
+                }
+
                 _logger.Info($"품목정보관리 조회 실행. part='{request.PartNo}'");
                 await Task.Delay(_config.Workflow.SearchDelayMilliseconds);
 
                 var pid = PartClassifier.ExtractPid(request.PartNo);
-                itemInfoWindow = FindItemInfoWindow(mainWindow) ?? itemInfoWindow;
                 _logger.Info($"품목정보관리 그리드 행 탐색 시작. part='{request.PartNo}', pid='{pid}'");
                 var row = FindGridRowByProductId(itemInfoWindow, pid);
                 if (row is null)
                 {
                     _logger.Warn($"품목정보관리 그리드 행 1차 미발견. 1초 후 재시도. part='{request.PartNo}', pid='{pid}'");
                     await Task.Delay(1000);
-                    itemInfoWindow = FindItemInfoWindow(mainWindow) ?? itemInfoWindow;
                     row = FindGridRowByProductId(itemInfoWindow, pid);
                 }
 
@@ -249,7 +290,7 @@ public sealed class UnimesApp
                     {
                         result.Status = "SKIPPED";
                         result.Saved = "NO";
-                        result.Message = $"품목 코드 미존재 → 경고 확인 후 고객사PartID 팝업 취소. part='{request.PartNo}'";
+                        result.Message = $"품목 코드 미존재 → 경고 확인 후 기파트 키보드 복구. part='{request.PartNo}'";
                         _logger.Info($"품목정보관리 skipped missing part after row search. part='{request.PartNo}'");
                         results.Add(result);
                         if (_config.Workflow.StopOnFirstFailure) break;
@@ -266,6 +307,7 @@ public sealed class UnimesApp
                 }
 
                 _logger.Info($"품목정보관리 그리드 행 발견. part='{request.PartNo}', pid='{pid}'");
+                validParts.Add(request);
                 if (classification == PartClass.Unknown)
                 {
                     _logger.Warn($"Part exists or returned a row, but classification failed. Skipping value changes. part='{request.PartNo}'");
@@ -368,6 +410,840 @@ public sealed class UnimesApp
         _logger.Info($"품목정보관리 result CSV saved: {outputPath}");
 
         ShowCompletionDialog(results, outputPath);
+        return validParts;
+    }
+
+    private async Task RunBinInfoWorkflowAsync(AutomationElement mainWindow, IReadOnlyList<PartRequest> requests)
+    {
+        if (requests.Count == 0)
+        {
+            _logger.Info("BIN 정보 관리 대상 Part 없음. 건너뜀.");
+            return;
+        }
+
+        _logger.Info($"품목별 BIN 정보 관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
+        await NavigateToMenuByF3Async(mainWindow, _config.BinInfo.MenuName);
+
+        var useProductLookup = _config.Workflow.RuntimeWorkScope == WorkScope.BinInfo;
+        AutomationElement binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+        AutomationElement? partIdEdit = FindBinPartIdEdit(binWindow);
+        AutomationElement? searchButton = FindSearchButton(mainWindow);
+        _logger.Info($"BIN stable controls cached. partIdEdit={partIdEdit is not null}, searchButton={searchButton is not null}, productLookup={useProductLookup}");
+
+        foreach (var request in requests)
+        {
+            try
+            {
+                _logger.Info($"BIN part started. part='{request.PartNo}'");
+                BringToFront(mainWindow);
+
+                var target = BinIdResolver.Resolve(request.PartNo, _config.BinInfo);
+                if (target is null)
+                {
+                    _logger.Warn($"BIN 분류/용량 파싱 실패로 건너뜀. part='{request.PartNo}'");
+                    continue;
+                }
+
+                if (!IsElementUsable(binWindow))
+                {
+                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                }
+
+                if (!IsElementUsable(partIdEdit))
+                {
+                    partIdEdit = FindBinPartIdEdit(binWindow);
+                }
+
+                if (partIdEdit is null)
+                {
+                    _logger.Error($"BIN 품목 ID 입력칸 미발견. part='{request.PartNo}'");
+                    _screenshots.CaptureElement(binWindow, $"bin_part_id_not_found_{MakeSafeToken(request.PartNo)}");
+                    continue;
+                }
+
+                if (useProductLookup)
+                {
+                    if (!await SelectBinProductFromLookupAsync(binWindow, partIdEdit, request.PartNo))
+                    {
+                        _logger.Warn($"BIN 품목 코드 미존재로 건너뜀. part='{request.PartNo}'");
+                        continue;
+                    }
+                }
+                else
+                {
+                    SetElementText(partIdEdit, request.PartNo, "BIN 품목 ID");
+                    CommitField();
+                    await Task.Delay(250);
+                }
+
+                if (!IsElementUsable(searchButton))
+                {
+                    searchButton = FindSearchButton(mainWindow);
+                }
+
+                if (searchButton is not null)
+                {
+                    ClickElement(searchButton, "BIN search query");
+                }
+                else
+                {
+                    _logger.Warn("BIN 조회 버튼 미발견. 좌표 기반 fallback 사용.");
+                    ClickToolbarSearchFallback(mainWindow);
+                }
+
+                _logger.Info($"BIN 조회 실행. part='{request.PartNo}'");
+                await Task.Delay(_config.Workflow.SearchDelayMilliseconds);
+
+                if (!IsElementUsable(binWindow))
+                {
+                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                }
+
+                var existingRows = FindBinRowsForPart(binWindow, request.PartNo).Count;
+                if (existingRows > 0)
+                {
+                    _logger.Info($"BIN 기존 등록 행 발견. 신규 행추가 없이 건너뜀. part='{request.PartNo}', rows={existingRows}");
+                    continue;
+                }
+
+                await ConfirmNoDataPopupAsync(request.PartNo);
+
+                if (!ClickInsertRow(mainWindow))
+                {
+                    _logger.Error($"BIN 행추가 실패. part='{request.PartNo}'");
+                    continue;
+                }
+
+                await Task.Delay(400);
+                if (!IsElementUsable(binWindow))
+                {
+                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                }
+
+                var row = FindNewBinRow(binWindow);
+                if (row is null)
+                {
+                    _logger.Error($"BIN 추가 행 미발견. part='{request.PartNo}'");
+                    _screenshots.CaptureElement(binWindow, $"bin_new_row_not_found_{MakeSafeToken(request.PartNo)}");
+                    continue;
+                }
+
+                if (!await SelectProcessPopupAsync(row, target.ProcessSearchKey))
+                {
+                    _logger.Error($"BIN 공정명 입력 실패. part='{request.PartNo}', key='{target.ProcessSearchKey}'");
+                    continue;
+                }
+
+                if (!IsElementUsable(row))
+                {
+                    row = FindNewBinRow(binWindow);
+                }
+
+                if (row is null)
+                {
+                    _logger.Error($"BIN 공정명 선택 후 행 재탐색 실패. part='{request.PartNo}'");
+                    continue;
+                }
+
+                FillFixedBinCells(row);
+
+                if (!await SelectBinIdPopupExactAsync(row, target.BinIdName))
+                {
+                    _logger.Warn($"BIN ID 미설정으로 저장 건너뜀. part='{request.PartNo}', binId='{target.BinIdName}'");
+                    continue;
+                }
+
+                if (SaveItemInfo(mainWindow))
+                {
+                    await Task.Delay(800);
+                    _screenshots.CaptureElement(binWindow, $"bin_after_save_{MakeSafeToken(request.PartNo)}");
+                    _logger.Info($"BIN saved. part='{request.PartNo}', binId='{target.BinIdName}'");
+                }
+                else
+                {
+                    _logger.Warn($"BIN 저장 게이트로 저장 생략. part='{request.PartNo}', binId='{target.BinIdName}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"BIN 처리 실패. part='{request.PartNo}'");
+                _screenshots.CaptureElement(binWindow, $"bin_exception_{MakeSafeToken(request.PartNo)}");
+                if (_config.Workflow.StopOnFirstFailure)
+                {
+                    break;
+                }
+            }
+        }
+
+        _logger.Info("품목별 BIN 정보 관리 workflow finished.");
+    }
+
+    private AutomationElement? FindBinPartIdEdit(AutomationElement binWindow)
+    {
+        return FindByAutomationId(binWindow, "2953814")
+               ?? FindEditNextToLabel(binWindow, "품목 ID");
+    }
+
+    private async Task<bool> SelectBinProductFromLookupAsync(AutomationElement binWindow, AutomationElement partIdEdit, string partNo)
+    {
+        var popup = FindPopupWindow(IsBinProductLookupPopupWindow);
+        if (popup is null && !OpenBinProductLookupPopup(binWindow, partIdEdit))
+        {
+            _logger.Warn($"BIN 품목 코드 검색 팝업을 열지 못했습니다. part='{partNo}'");
+            return false;
+        }
+
+        await Task.Delay(300);
+        popup = FindPopupWindow(IsBinProductLookupPopupWindow);
+        if (popup is not null)
+        {
+            var input = FindEditNextToLabel(popup, "품목 코드");
+            if (input is not null)
+            {
+                TryFocus(input, "BIN 품목 코드 검색키");
+            }
+        }
+
+        SendKeys.SendWait("^a");
+        SendKeys.SendWait(EscapeForSendKeys(partNo));
+        await Task.Delay(100);
+        SendKeys.SendWait("{ENTER}");
+        _logger.Info($"BIN 품목 코드 팝업 조회 Enter 전송. part='{partNo}'");
+        await Task.Delay(500);
+
+        if (await WaitAndDismissBinProductMissingWarningAsync(partNo, TimeSpan.FromMilliseconds(1500)))
+        {
+            _logger.Warn($"BIN 품목 코드 미존재. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
+            return false;
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        await Task.Delay(500);
+        popup = FindPopupWindow(IsBinProductLookupPopupWindow);
+        if (popup is not null)
+        {
+            _logger.Warn($"BIN 품목 코드 검색 결과 없음. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
+            return false;
+        }
+
+        _logger.Info($"BIN 품목 코드 검색 선택 완료. part='{partNo}'");
+        return true;
+    }
+
+    private async Task<bool> WaitAndDismissBinProductMissingWarningAsync(string partNo, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await DismissBinProductMissingWarningAsync(partNo))
+            {
+                return true;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return false;
+    }
+
+    private bool OpenBinProductLookupPopup(AutomationElement binWindow, AutomationElement partIdEdit)
+    {
+        TryFocus(partIdEdit, "BIN 품목 ID");
+
+        var button = FindBinProductLookupButton(binWindow, partIdEdit);
+        if (button is not null)
+        {
+            ClickElementCenterByMouse(button);
+            Thread.Sleep(250);
+            _logger.Info("BIN 품목 코드 검색 버튼 클릭.");
+            return true;
+        }
+
+        var rect = SafeReadRect(() => partIdEdit.Current.BoundingRectangle);
+        if (!rect.HasValue || rect.Value.IsEmpty)
+        {
+            return false;
+        }
+
+        Cursor.Position = new System.Drawing.Point((int)(rect.Value.Right + 10), (int)(rect.Value.Top + rect.Value.Height / 2));
+        MouseClick();
+        Thread.Sleep(250);
+        _logger.Info("BIN 품목 코드 검색 버튼 좌표 fallback 클릭.");
+        return true;
+    }
+
+    private AutomationElement? FindBinProductLookupButton(AutomationElement binWindow, AutomationElement partIdEdit)
+    {
+        var editRect = SafeReadRect(() => partIdEdit.Current.BoundingRectangle);
+        if (!editRect.HasValue || editRect.Value.IsEmpty)
+        {
+            return null;
+        }
+
+        return FindDescendants(binWindow, ControlType.Button)
+            .Where(button => string.Equals(
+                SafeRead(() => button.Current.AutomationId) ?? "",
+                "uniButton_OpenPopup",
+                StringComparison.Ordinal))
+            .Select(button => new
+            {
+                Button = button,
+                Rect = SafeReadRect(() => button.Current.BoundingRectangle)
+            })
+            .Where(x => x.Rect.HasValue && !x.Rect.Value.IsEmpty)
+            .Where(x => Math.Abs(CenterY(x.Rect!.Value) - CenterY(editRect.Value)) <= 10)
+            .Where(x => x.Rect!.Value.Left >= editRect.Value.Right - 2)
+            .OrderBy(x => x.Rect!.Value.Left)
+            .FirstOrDefault()?.Button;
+    }
+
+    private async Task<bool> DismissBinProductMissingWarningAsync(string partNo)
+    {
+        var warning = FindWarningDialogByTextFast(["971001", "존재하지"]);
+        if (warning is null)
+        {
+            return false;
+        }
+
+        var ok = FindButtonByAnyName(warning, ["확인", "OK"]);
+        if (ok is not null)
+        {
+            ClickElement(ok, "BIN product missing warning confirm");
+            await Task.Delay(300);
+        }
+        else
+        {
+            SendKeys.SendWait("{ENTER}");
+            await Task.Delay(300);
+        }
+
+        _logger.Warn($"BIN 품목 코드 미존재 경고 처리. part='{partNo}'");
+        return true;
+    }
+
+    private void DismissFocusedDialogByEnter(string partNo)
+    {
+        SendKeys.SendWait("{ENTER}");
+        Thread.Sleep(300);
+        _logger.Warn($"BIN 품목 코드 미존재 경고 Enter 처리. part='{partNo}'");
+    }
+
+    private async Task<bool> HandleOpenPartIdPopupFastAsync(string originalPart)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(200);
+        AutomationElement? popup = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            popup = FindPartIdPopupFast();
+            if (popup is not null)
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        if (popup is null)
+        {
+            return false;
+        }
+
+        _logger.Warn($"BIN 품목 ID 입력 후 PartID 팝업 감지. part='{originalPart}'");
+        var rows = FindDescendants(popup, ControlType.DataItem).ToList();
+        if (rows.Count > 0)
+        {
+            var row = FindPopupRowByProductCode(popup, originalPart) ?? rows[0];
+            await SelectPartIdPopupRowAsync(popup, row, originalPart);
+            return false;
+        }
+
+        await DismissMissingWarningAsync(originalPart, forceEnterFallback: true);
+        await RecoverPartIdPopupByKeyboardAsync(originalPart);
+        return true;
+    }
+
+    private AutomationElement? FindPartIdPopupFast()
+    {
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (IsPartIdPopupWindow(window))
+            {
+                return window;
+            }
+
+            if (!IsUnimesCandidate(window))
+            {
+                continue;
+            }
+
+            AutomationElementCollection children;
+            try
+            {
+                children = window.FindAll(
+                    TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (AutomationElement child in children)
+            {
+                if (IsPartIdPopupWindow(child))
+                {
+                    return child;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private async Task ConfirmNoDataPopupAsync(string partNo)
+    {
+        var warning = FindWarningDialogByTextFast(["900014", "검색된 Data", "검색된 데이터", "Data가 없습니다"]);
+        if (warning is null)
+        {
+            _logger.Warn($"BIN 900014 경고창 미감지. Enter fallback으로 확인 시도. part='{partNo}'");
+            SendKeys.SendWait("{ENTER}");
+            await Task.Delay(300);
+            return;
+        }
+
+        var ok = FindButtonByAnyName(warning, ["확인", "OK"]);
+        if (ok is not null)
+        {
+            ClickElement(ok, "BIN no-data warning confirm");
+            _logger.Info("BIN 900014 경고창 [확인] 처리.");
+            await Task.Delay(300);
+            return;
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        _logger.Info("BIN 900014 경고창 Enter fallback 전송.");
+        await Task.Delay(400);
+    }
+
+    private List<AutomationElement> FindBinRowsForPart(AutomationElement binWindow, string partNo)
+    {
+        return FindDescendants(binWindow, ControlType.DataItem)
+            .Where(IsBinInfoRow)
+            .Where(row =>
+            {
+                var product = FindGridCell(row, "품목ID", ControlType.Edit);
+                var value = product is null ? "" : ReadValue(product).Trim();
+                return string.Equals(value, partNo, StringComparison.OrdinalIgnoreCase);
+            })
+            .ToList();
+    }
+
+    private bool ClickInsertRow(AutomationElement mainWindow)
+    {
+        var insert = FindButtonByAutomationIdContains(mainWindow, "Tool : InsertRow")
+            ?? FindButtonByAnyName(mainWindow, ["행추가"]);
+        if (insert is not null)
+        {
+            ClickElement(insert, "BIN insert row");
+            _logger.Info("BIN 행추가 버튼 클릭.");
+            return true;
+        }
+
+        try
+        {
+            BringToFront(mainWindow);
+            SendKeys.SendWait("^{INSERT}");
+            _logger.Info("BIN 행추가 Ctrl+Insert 전송.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"BIN 행추가 Ctrl+Insert 실패: {ex.Message}");
+            return false;
+        }
+    }
+
+    private AutomationElement? FindNewBinRow(AutomationElement binWindow)
+    {
+        return FindDescendants(binWindow, ControlType.DataItem)
+            .Where(IsBinInfoRow)
+            .Select(row => new
+            {
+                Row = row,
+                Rect = SafeReadRect(() => row.Current.BoundingRectangle)
+            })
+            .Where(x => x.Rect.HasValue && !x.Rect.Value.IsEmpty)
+            .OrderBy(x => x.Rect!.Value.Top)
+            .LastOrDefault()?.Row;
+    }
+
+    private bool IsBinInfoRow(AutomationElement row)
+    {
+        var editNames = FindDescendants(row, ControlType.Edit)
+            .Select(edit => SafeRead(() => edit.Current.Name) ?? "")
+            .ToHashSet(StringComparer.Ordinal);
+
+        return editNames.Contains("품목ID") &&
+               editNames.Contains("공정명") &&
+               editNames.Contains("BIN ID");
+    }
+
+    private async Task<bool> SelectProcessPopupAsync(AutomationElement row, string processKey)
+    {
+        var cell = FindGridCell(row, "공정명", ControlType.Edit);
+        if (cell is null)
+        {
+            _logger.Warn("BIN 공정명 셀 미발견.");
+            return false;
+        }
+
+        OpenCellPopup(cell, "공정명");
+        var popup = await WaitForPopupWindowAsync(IsProcessPopupWindow, TimeSpan.FromMilliseconds(1500));
+        if (popup is null)
+        {
+            _logger.Warn("공정명 검색 팝업 미감지.");
+            return false;
+        }
+
+        var input = FindEditNextToLabel(popup, "Segment ID");
+        if (input is not null)
+        {
+            SetElementText(input, processKey, "공정명 Segment ID");
+            await Task.Delay(150);
+            ClickPopupSearch(popup, "공정명");
+            await WaitForPopupRowAsync(popup, processKey, TimeSpan.FromMilliseconds(1500));
+        }
+
+        var refreshed = FindPopupWindow(IsProcessPopupWindow) ?? popup;
+        var resultRow = FindPopupRowByExactValue(refreshed, processKey);
+        if (resultRow is null)
+        {
+            _logger.Warn($"공정명 검색 결과 미발견. key='{processKey}'");
+            await CancelGenericPopupAsync(refreshed, "공정명");
+            return false;
+        }
+
+        await SelectGenericPopupRowAsync(refreshed, resultRow, "공정명", processKey);
+        _logger.Info($"공정명 선택 완료. key='{processKey}'");
+        return true;
+    }
+
+    private async Task<bool> SelectBinIdPopupExactAsync(AutomationElement row, string binIdName)
+    {
+        var cell = FindGridCell(row, "BIN ID", ControlType.Edit);
+        if (cell is null)
+        {
+            _logger.Warn("BIN ID 셀 미발견.");
+            return false;
+        }
+
+        OpenCellPopup(cell, "BIN ID");
+        var popup = await WaitForPopupWindowAsync(IsBinIdPopupWindow, TimeSpan.FromMilliseconds(1500));
+        if (popup is null)
+        {
+            _logger.Warn("BIN ID 검색 팝업 미감지.");
+            return false;
+        }
+
+        var input = FindEditNextToLabel(popup, "BINID");
+        if (input is not null)
+        {
+            SetElementText(input, binIdName, "BIN ID 검색키");
+            await Task.Delay(150);
+            ClickPopupSearch(popup, "BIN ID");
+            await WaitForPopupRowAsync(popup, binIdName, TimeSpan.FromMilliseconds(2000));
+        }
+
+        var refreshed = FindPopupWindow(IsBinIdPopupWindow) ?? popup;
+        var resultRow = FindPopupRowByExactValue(refreshed, binIdName);
+        if (resultRow is null)
+        {
+            _logger.Warn($"BIN ID 미발견(미등록 가능). binId='{binIdName}'");
+            await CancelGenericPopupAsync(refreshed, "BIN ID");
+            return false;
+        }
+
+        await SelectGenericPopupRowAsync(refreshed, resultRow, "BIN ID", binIdName);
+        _logger.Info($"BIN ID 선택 완료. binId='{binIdName}'");
+        return true;
+    }
+
+    private AutomationElement? FindGridCell(AutomationElement row, string columnName, ControlType controlType)
+    {
+        return FindDescendants(row, controlType)
+            .FirstOrDefault(cell =>
+                string.Equals(SafeRead(() => cell.Current.Name) ?? "", columnName, StringComparison.Ordinal));
+    }
+
+    private void OpenCellPopup(AutomationElement cell, string columnName)
+    {
+        TryFocus(cell, $"BIN {columnName} cell");
+        var rect = SafeReadRect(() => cell.Current.BoundingRectangle)
+            ?? throw new InvalidOperationException($"BIN {columnName} 셀 위치를 읽지 못했습니다.");
+        if (rect.IsEmpty)
+        {
+            throw new InvalidOperationException($"BIN {columnName} 셀 위치가 비어 있습니다.");
+        }
+
+        Cursor.Position = new System.Drawing.Point((int)(rect.Right - 8), (int)(rect.Top + rect.Height / 2));
+        MouseClick();
+        Thread.Sleep(250);
+        _logger.Info($"BIN {columnName} 셀 팝업 버튼 클릭.");
+    }
+
+    private void FillFixedBinCells(AutomationElement row)
+    {
+        SetBinComboCell(row, "BIN Type", _config.BinInfo.BinType, expectedStoredValue: "0");
+
+        var retestNo = FindGridCell(row, "Retest No", ControlType.Edit)
+            ?? throw new InvalidOperationException("BIN Retest No 셀을 찾지 못했습니다.");
+        SetElementText(retestNo, _config.BinInfo.RetestNo, "BIN Retest No");
+        CommitField();
+
+        SetBinComboCell(row, "Bin완료여부", _config.BinInfo.BinComplete);
+        SetBinComboCell(row, "Retest TH", _config.BinInfo.RetestTh);
+    }
+
+    private void SetBinComboCell(AutomationElement row, string columnName, string targetValue, string? expectedStoredValue = null)
+    {
+        var combo = FindGridCell(row, columnName, ControlType.ComboBox)
+            ?? throw new InvalidOperationException($"BIN {columnName} 셀을 찾지 못했습니다.");
+
+        var current = GetComboCurrentText(combo);
+        if (IsExpectedBinComboValue(current, targetValue, expectedStoredValue))
+        {
+            _logger.Info($"BIN cell already set. column='{columnName}', value='{current}'");
+            return;
+        }
+
+        TryFocus(combo, $"BIN {columnName}");
+        var target = FindDescendants(combo, ControlType.ListItem)
+            .FirstOrDefault(li => string.Equals(SafeRead(() => li.Current.Name) ?? "", targetValue, StringComparison.Ordinal));
+        if (target is null)
+        {
+            throw new InvalidOperationException($"BIN {columnName} 목록에서 '{targetValue}' 항목을 찾지 못했습니다.");
+        }
+
+        if (!TrySelectComboByKeyboard(combo, targetValue, columnName))
+        {
+            throw new InvalidOperationException($"BIN {columnName} 값을 '{targetValue}'로 선택하지 못했습니다.");
+        }
+
+        var updated = GetComboCurrentText(combo);
+        if (!IsExpectedBinComboValue(updated, targetValue, expectedStoredValue))
+        {
+            _logger.Warn($"BIN combo selected but displayed value differs. column='{columnName}', expected='{targetValue}', actual='{updated}'");
+        }
+        else
+        {
+            _logger.Info($"BIN cell set. column='{columnName}', '{current}'->'{updated}'");
+        }
+    }
+
+    private static bool IsExpectedBinComboValue(string actual, string targetValue, string? expectedStoredValue)
+    {
+        return string.Equals(actual, targetValue, StringComparison.Ordinal) ||
+               (!string.IsNullOrWhiteSpace(expectedStoredValue) &&
+                string.Equals(actual, expectedStoredValue, StringComparison.Ordinal));
+    }
+
+    private void ClickPopupSearch(AutomationElement popup, string label)
+    {
+        var search = FindButtonByAnyName(popup, ["조회", "Search", "Find"]);
+        if (search is not null)
+        {
+            ClickElement(search, $"{label} popup search");
+            return;
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        _logger.Info($"{label} 팝업 조회 버튼 미발견. Enter fallback 전송.");
+    }
+
+    private async Task SelectGenericPopupRowAsync(AutomationElement popup, AutomationElement row, string label, string value)
+    {
+        ClickElement(row, $"{label} popup row");
+        await Task.Delay(150);
+
+        var ok = FindButtonByAnyName(popup, ["확인", "OK"]);
+        if (ok is not null)
+        {
+            ClickElement(ok, $"{label} popup confirm");
+            await WaitForPopupClosedAsync(popup, TimeSpan.FromMilliseconds(1500));
+            return;
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        await WaitForPopupClosedAsync(popup, TimeSpan.FromMilliseconds(1500));
+        _logger.Info($"{label} 팝업 확인 Enter fallback 전송. value='{value}'");
+    }
+
+    private async Task CancelGenericPopupAsync(AutomationElement popup, string label)
+    {
+        var cancel = FindButtonByAnyName(popup, ["취소", "Cancel"]);
+        if (cancel is not null)
+        {
+            ClickElement(cancel, $"{label} popup cancel");
+            await WaitForPopupClosedAsync(popup, TimeSpan.FromMilliseconds(1000));
+            return;
+        }
+
+        SendKeys.SendWait("{ESC}");
+        await WaitForPopupClosedAsync(popup, TimeSpan.FromMilliseconds(1000));
+    }
+
+    private async Task WaitForPopupRowAsync(AutomationElement popup, string exactValue, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var refreshed = FindPopupWindow(candidate => IsSamePopup(candidate, popup)) ?? popup;
+            if (FindPopupRowByExactValue(refreshed, exactValue) is not null)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+    }
+
+    private AutomationElement? FindPopupRowByExactValue(AutomationElement popup, string exactValue)
+    {
+        var rows = FindDescendants(popup, ControlType.DataItem).ToList();
+        foreach (var row in rows)
+        {
+            var name = SafeRead(() => row.Current.Name) ?? "";
+            if (string.Equals(name.Trim(), exactValue, StringComparison.OrdinalIgnoreCase))
+            {
+                return row;
+            }
+
+            var values = FindDescendants(row, ControlType.Edit).Select(ReadValue);
+            if (values.Any(value => string.Equals(value.Trim(), exactValue, StringComparison.OrdinalIgnoreCase)))
+            {
+                return row;
+            }
+        }
+
+        if (rows.Count == 1)
+        {
+            _logger.Warn($"팝업 행을 정확히 식별하지 못했지만 결과가 1건이라 해당 행을 선택합니다. value='{exactValue}'");
+            return rows[0];
+        }
+
+        return null;
+    }
+
+    private async Task<AutomationElement?> WaitForPopupWindowAsync(Func<AutomationElement, bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var popup = FindPopupWindow(predicate);
+            if (popup is not null)
+            {
+                return popup;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return FindPopupWindow(predicate);
+    }
+
+    private AutomationElement? FindPopupWindow(Func<AutomationElement, bool> predicate)
+    {
+        var candidates = new List<AutomationElement>();
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (IsUnimesCandidate(window))
+            {
+                if (IsSmallPopupCandidate(window) && predicate(window))
+                {
+                    candidates.Add(window);
+                }
+
+                AutomationElementCollection children;
+                try
+                {
+                    children = window.FindAll(
+                        TreeScope.Children,
+                        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (AutomationElement child in children)
+                {
+                    if (predicate(child))
+                    {
+                        candidates.Add(child);
+                    }
+                }
+
+                continue;
+            }
+
+            if (IsSmallPopupCandidate(window) && predicate(window))
+            {
+                candidates.Add(window);
+            }
+        }
+
+        return candidates
+            .Where(window =>
+            {
+                var rect = SafeReadRect(() => window.Current.BoundingRectangle);
+                return rect.HasValue && !rect.Value.IsEmpty;
+            })
+            .LastOrDefault();
+    }
+
+    private async Task WaitForPopupClosedAsync(AutomationElement popup, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (FindPopupWindow(candidate => IsSamePopup(candidate, popup)) is null)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+    }
+
+    private static bool IsSamePopup(AutomationElement candidate, AutomationElement popup)
+    {
+        var left = SafeRead(() => candidate.Current.NativeWindowHandle);
+        var right = SafeRead(() => popup.Current.NativeWindowHandle);
+        return left != 0 && left == right;
+    }
+
+    private bool IsProcessPopupWindow(AutomationElement window)
+    {
+        var name = SafeRead(() => window.Current.Name) ?? "";
+        return string.Equals(name, "Undefined", StringComparison.Ordinal) &&
+               FindFirstByNameContains(window, "Segment ID") is not null;
+    }
+
+    private bool IsBinProductLookupPopupWindow(AutomationElement window)
+    {
+        var name = SafeRead(() => window.Current.Name) ?? "";
+        return string.Equals(name, "Undefined", StringComparison.Ordinal) &&
+               FindFirstByNameContains(window, "품목 코드") is not null &&
+               FindFirstByNameContains(window, "Segment ID") is null &&
+               FindFirstByNameContains(window, "BINID") is null;
+    }
+
+    private bool IsBinIdPopupWindow(AutomationElement window)
+    {
+        var name = SafeRead(() => window.Current.Name) ?? "";
+        return name.Contains("BINID Popup", StringComparison.OrdinalIgnoreCase) ||
+               (name.Contains("BIN", StringComparison.OrdinalIgnoreCase) &&
+                FindFirstByNameContains(window, "BINID") is not null);
     }
 
     private void CommitField()
@@ -531,12 +1407,12 @@ public sealed class UnimesApp
         return null;
     }
 
-    private AutomationElement? FindItemInfoWindow(AutomationElement mainWindow)
+    private AutomationElement? FindNamedWindow(AutomationElement mainWindow, string name)
     {
         return FindDescendants(mainWindow, ControlType.Window)
             .Where(window => string.Equals(
                 SafeRead(() => window.Current.Name) ?? "",
-                _config.ItemInfo.MenuName,
+                name,
                 StringComparison.Ordinal))
             .Where(window =>
             {
@@ -545,6 +1421,9 @@ public sealed class UnimesApp
             })
             .LastOrDefault();
     }
+
+    private AutomationElement? FindItemInfoWindow(AutomationElement mainWindow)
+        => FindNamedWindow(mainWindow, _config.ItemInfo.MenuName);
 
     private CellAction ApplyComboCell(AutomationElement row, string columnName, string targetValue, bool readOnlyMode)
     {
@@ -584,6 +1463,18 @@ public sealed class UnimesApp
             }
 
             _logger.Warn($"List item select did not commit target value. column='{columnName}', expected='{targetValue}', actual='{updated}'");
+        }
+
+        if (target is not null && TrySelectComboByKeyboard(combo, targetValue, columnName))
+        {
+            var updated = GetComboCurrentText(combo);
+            if (string.Equals(updated, targetValue, StringComparison.Ordinal))
+            {
+                _logger.Info($"Cell set via keyboard. column='{columnName}', '{current}'->'{targetValue}'");
+                return CellAction.Changed;
+            }
+
+            _logger.Warn($"Keyboard select did not commit target value. column='{columnName}', expected='{targetValue}', actual='{updated}'");
         }
 
         if (combo.TryGetCurrentPattern(ValuePattern.Pattern, out var rawPattern) &&
@@ -681,6 +1572,64 @@ public sealed class UnimesApp
         }
 
         return false;
+    }
+
+    private bool TrySelectComboByKeyboard(AutomationElement combo, string targetValue, string columnName)
+    {
+        var items = FindDescendants(combo, ControlType.ListItem).ToList();
+        var index = items.FindIndex(li =>
+            string.Equals(SafeRead(() => li.Current.Name) ?? "", targetValue, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            _logger.Warn($"Keyboard select skipped: list item not found. column='{columnName}', target='{targetValue}'");
+            return false;
+        }
+
+        TryFocus(combo, $"grid cell '{columnName}'");
+        EnsureComboExpanded(combo, columnName);
+
+        // 한글 항목은 SendKeys 타이핑이 IME 때문에 불가하므로, 맨 위로 올린 뒤 인덱스만큼 내려가 고른다.
+        for (var i = 0; i < items.Count; i++)
+        {
+            SendKeys.SendWait("{UP}");
+            Thread.Sleep(40);
+        }
+
+        for (var i = 0; i < index; i++)
+        {
+            SendKeys.SendWait("{DOWN}");
+            Thread.Sleep(40);
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        Thread.Sleep(180);
+        _logger.Info($"Keyboard combo navigation done. column='{columnName}', index={index}, items={items.Count}");
+        return true;
+    }
+
+    private void EnsureComboExpanded(AutomationElement combo, string columnName)
+    {
+        try
+        {
+            if (combo.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var raw) &&
+                raw is ExpandCollapsePattern pattern)
+            {
+                if (pattern.Current.ExpandCollapseState != ExpandCollapseState.Expanded)
+                {
+                    pattern.Expand();
+                    Thread.Sleep(200);
+                }
+
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Combo expand (keyboard) failed. column='{columnName}', reason={ex.Message}");
+        }
+
+        SendKeys.SendWait("%{DOWN}");
+        Thread.Sleep(200);
     }
 
     private static bool IsListItemSelected(AutomationElement item)
@@ -806,24 +1755,35 @@ public sealed class UnimesApp
             .ThenBy(x => x.Rect!.Value.Left)
             .FirstOrDefault()?.Element;
     }
-    private void ClickSearch(AutomationElement mainWindow)
+    // 팝업에도 '조회' 버튼이 있으므로 메인 툴바 Query automation id를 먼저 사용한다.
+    private AutomationElement? FindSearchButton(AutomationElement mainWindow)
     {
-        // 팝업에도 '조회' 버튼이 있으므로 메인 툴바 Query automation id를 먼저 사용한다.
-        var searchButton = FindButtonByAutomationIdContains(mainWindow, "Tool : Query")
+        return FindButtonByAutomationIdContains(mainWindow, "Tool : Query")
             ?? FindButtonByAnyName(mainWindow, ["조회", "Search", "Find"]);
-        if (searchButton is not null)
+    }
+
+    private static bool IsElementUsable(AutomationElement? element)
+    {
+        if (element is null)
         {
-            ClickElement(searchButton, "search query");
-            return;
+            return false;
         }
 
-        _logger.Warn("Search button was not found by name/id. 좌표 기반 fallback 사용: toolbar search icon.");
-        ClickToolbarSearchFallback(mainWindow);
+        try
+        {
+            // 캐시한 요소가 stale이면 프로퍼티 접근에서 ElementNotAvailableException이 난다.
+            _ = element.Current.ControlType;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<bool> HandleOpenPartIdPopupAsync(string originalPart)
     {
-        var popup = await WaitForPartIdPopupAsync(TimeSpan.FromMilliseconds(1200));
+        var popup = await WaitForPartIdPopupAsync(TimeSpan.FromMilliseconds(700));
         if (popup is null)
         {
             return false;
@@ -845,9 +1805,9 @@ public sealed class UnimesApp
             await Task.Delay(80);
         }
 
-        _logger.Warn($"고객사PartID 팝업에 결과가 없어 미존재로 보고 경고 확인 후 팝업을 취소합니다. part='{originalPart}'");
+        _logger.Warn($"고객사PartID 팝업에 결과가 없어 미존재로 보고 경고 확인 후 기파트로 키보드 복구합니다. part='{originalPart}'");
         await DismissMissingWarningAsync(originalPart, forceEnterFallback: true);
-        await CancelPartIdPopupAfterMissingAsync(originalPart);
+        await RecoverPartIdPopupByKeyboardAsync(originalPart);
         return true;
     }
 
@@ -892,7 +1852,7 @@ public sealed class UnimesApp
 
     // 미존재 파트 처리. 조회 직후:
     //  1) '[971001] 존재하지 않습니다' 경고가 떴으면 닫는다(=미존재 확정 신호).
-    //  2) 자동으로 열린 고객사PartID 팝업은 취소로 닫고 해당 Part는 건너뛴다.
+    //  2) 자동으로 열린 고객사PartID 팝업에 기파트를 넣고 Enter, Enter로 정상값을 다시 선택한다.
     // 미존재로 처리했으면 true, 경고가 없으면(다른 원인) false.
     private async Task<bool> HandleMissingPartAsync(AutomationElement? mainWindow, string originalPart)
     {
@@ -918,9 +1878,9 @@ public sealed class UnimesApp
                 return false;
             }
 
-            _logger.Warn($"고객사PartID 팝업이 열려 있어 UIA 미감지 경고로 보고 Enter 후 팝업 취소 처리합니다. part='{originalPart}'");
+            _logger.Warn($"고객사PartID 팝업이 열려 있어 UIA 미감지 경고로 보고 Enter 후 기파트 복구 처리합니다. part='{originalPart}'");
             await DismissMissingWarningAsync(originalPart, forceEnterFallback: true);
-            await CancelPartIdPopupAfterMissingAsync(originalPart);
+            await RecoverPartIdPopupByKeyboardAsync(originalPart);
             return true;
         }
 
@@ -935,7 +1895,7 @@ public sealed class UnimesApp
             await Task.Delay(300);
         }
 
-        await CancelPartIdPopupAfterMissingAsync(originalPart);
+        await RecoverPartIdPopupByKeyboardAsync(originalPart);
 
         return true;
     }
@@ -993,10 +1953,100 @@ public sealed class UnimesApp
         _logger.Info($"고객사PartID 팝업 [취소] 처리. part='{originalPart}'");
     }
 
-    private async Task CancelPartIdPopupAfterMissingAsync(string originalPart)
+    private async Task RecoverPartIdPopupByKeyboardAsync(string originalPart)
     {
-        await WaitForPartIdPopupAsync(TimeSpan.FromMilliseconds(1200));
-        await CancelPartIdPopupAsync(originalPart);
+        var recoveryPart = _config.ItemInfo.RecoveryPart;
+        if (string.IsNullOrWhiteSpace(recoveryPart))
+        {
+            _logger.Warn("itemInfo.recoveryPart가 비어 있어 기파트 키보드 복구를 생략하고 팝업을 취소합니다.");
+            await CancelPartIdPopupAsync(originalPart);
+            return;
+        }
+
+        var popup = FindPartIdPopup()
+            ?? throw new InvalidOperationException("고객사PartID 팝업을 찾지 못해 기파트 키보드 복구를 진행할 수 없습니다.");
+
+        var productCodeEdit = FindPopupProductCodeEdit(popup)
+            ?? throw new InvalidOperationException("고객사PartID 팝업의 품목 코드 입력칸을 찾지 못했습니다.");
+
+        SetElementText(productCodeEdit, recoveryPart, "고객사PartID 팝업 품목 코드(복구)");
+        TryFocus(productCodeEdit, "고객사PartID 팝업 품목 코드(복구)");
+        await Task.Delay(300);
+
+        _logger.Info($"기파트 복구 조회 Enter 전송. recovery='{recoveryPart}'");
+        SendKeys.SendWait("{ENTER}");
+        await WaitForPartIdPopupResultAsync(recoveryPart, TimeSpan.FromMilliseconds(2000));
+        await Task.Delay(200);
+        _logger.Info($"기파트 복구 선택 Enter 전송. recovery='{recoveryPart}'");
+        SendKeys.SendWait("{ENTER}");
+        await WaitForPartIdPopupClosedAsync(TimeSpan.FromMilliseconds(1500));
+
+        if (FindPartIdPopup() is not null)
+        {
+            var refreshedPopup = FindPartIdPopup();
+            var row = refreshedPopup is null ? null : FindPopupRowByProductCode(refreshedPopup, recoveryPart);
+            if (refreshedPopup is not null && row is not null)
+            {
+                await SelectPartIdPopupRowAsync(refreshedPopup, row, recoveryPart);
+            }
+            else
+            {
+                _logger.Warn($"기파트 키보드 복구 후에도 팝업이 남아 있어 취소합니다. recovery='{recoveryPart}'");
+                await CancelPartIdPopupAsync(originalPart);
+            }
+        }
+
+        _logger.Info($"기파트 키보드 복구 완료. original='{originalPart}', recovery='{recoveryPart}'");
+    }
+
+    private async Task WaitForPartIdPopupResultAsync(string productCode, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var popup = FindPartIdPopup();
+            if (popup is null)
+            {
+                return;
+            }
+
+            if (FindPopupRowByProductCode(popup, productCode) is not null ||
+                FindDescendants(popup, ControlType.DataItem).Any())
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+    }
+
+    private async Task WaitForPartIdPopupClosedAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (FindPartIdPopup() is null)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+    }
+
+    private AutomationElement? FindPopupProductCodeEdit(AutomationElement popup)
+    {
+        var edits = FindDescendants(popup, ControlType.Edit).ToList();
+        return edits.FirstOrDefault(edit =>
+                   (SafeRead(() => edit.Current.AutomationId) ?? "")
+                   .Contains("txtCd", StringComparison.OrdinalIgnoreCase))
+               ?? edits.FirstOrDefault(edit =>
+                   (SafeRead(() => edit.Current.AutomationId) ?? "")
+                   .Equals("1441912", StringComparison.OrdinalIgnoreCase))
+               ?? edits.FirstOrDefault(edit =>
+                   (SafeRead(() => edit.Current.AutomationId) ?? "")
+                   .Equals("2427784", StringComparison.OrdinalIgnoreCase))
+               ?? edits.FirstOrDefault();
     }
 
     private async Task SelectPartIdPopupRowAsync(AutomationElement popup, AutomationElement row, string part)
@@ -1126,6 +2176,91 @@ public sealed class UnimesApp
         }
 
         return null;
+    }
+
+    private AutomationElement? FindWarningDialogByText(IReadOnlyCollection<string> tokens)
+    {
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (WindowContainsAnyText(window, tokens) && FindButtonByAnyName(window, ["확인", "OK"]) is not null)
+            {
+                return window;
+            }
+
+            foreach (var childWindow in FindDescendants(window, ControlType.Window))
+            {
+                if (WindowContainsAnyText(childWindow, tokens) &&
+                    FindButtonByAnyName(childWindow, ["확인", "OK"]) is not null)
+                {
+                    return childWindow;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private AutomationElement? FindWarningDialogByTextFast(IReadOnlyCollection<string> tokens)
+    {
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (IsSmallPopupCandidate(window) &&
+                WindowContainsAnyText(window, tokens) &&
+                FindButtonByAnyName(window, ["확인", "OK"]) is not null)
+            {
+                return window;
+            }
+
+            if (!IsUnimesCandidate(window))
+            {
+                continue;
+            }
+
+            AutomationElementCollection children;
+            try
+            {
+                children = window.FindAll(
+                    TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (AutomationElement child in children)
+            {
+                if (IsSmallPopupCandidate(child) &&
+                    WindowContainsAnyText(child, tokens) &&
+                    FindButtonByAnyName(child, ["확인", "OK"]) is not null)
+                {
+                    return child;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSmallPopupCandidate(AutomationElement window)
+    {
+        var rect = SafeReadRect(() => window.Current.BoundingRectangle);
+        if (!rect.HasValue || rect.Value.IsEmpty)
+        {
+            return false;
+        }
+
+        return rect.Value.Width is > 0 and <= 900 &&
+               rect.Value.Height is > 0 and <= 700;
+    }
+
+    private bool WindowContainsAnyText(AutomationElement window, IReadOnlyCollection<string> tokens)
+    {
+        return FindDescendants(window, null)
+            .Select(element => SafeRead(() => element.Current.Name) ?? "")
+            .Any(name => tokens.Any(token =>
+                !string.IsNullOrWhiteSpace(token) &&
+                name.Contains(token, StringComparison.OrdinalIgnoreCase)));
     }
 
     private bool IsMissingPartWarningWindow(AutomationElement window)
