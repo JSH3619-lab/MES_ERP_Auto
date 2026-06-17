@@ -1,0 +1,13 @@
+bin/
+obj/
+logs/
+screenshots/
+output/
+.vs/
+.idea/
+.vscode/
+.claude/
+.code-review-graph/
+appsettings.json
+*.user
+*.suo
