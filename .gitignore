@@ -9,5 +9,6 @@ output/
 .claude/
 .code-review-graph/
 appsettings.json
+appsettings.save-test.json
 *.user
 *.suo
