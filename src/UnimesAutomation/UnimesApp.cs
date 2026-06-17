@@ -595,55 +595,92 @@ public sealed class UnimesApp
 
         await Task.Delay(300);
         popup = FindPopupWindow(IsBinProductLookupPopupWindow);
-        if (popup is not null)
+        if (popup is null)
         {
-            var input = FindEditNextToLabel(popup, "품목 코드");
-            if (input is not null)
-            {
-                TryFocus(input, "BIN 품목 코드 검색키");
-            }
+            _logger.Warn($"BIN 품목 코드 검색 팝업 미감지. part='{partNo}'");
+            return false;
         }
 
-        SendKeys.SendWait("^a");
-        SendKeys.SendWait(EscapeForSendKeys(partNo));
+        var input = FindBinProductLookupCodeEdit(popup);
+        if (input is null)
+        {
+            _logger.Warn($"BIN 품목 코드 검색 입력칸 미발견. part='{partNo}'");
+            return false;
+        }
+
+        var popupHandle = GetNativeHandle(popup);
+
+        SetElementText(input, partNo, "BIN 품목 코드 검색키");
+        TryFocus(input, "BIN 품목 코드 검색키");
         await Task.Delay(100);
         SendKeys.SendWait("{ENTER}");
         _logger.Info($"BIN 품목 코드 팝업 조회 Enter 전송. part='{partNo}'");
-        await Task.Delay(500);
 
-        if (await WaitAndDismissBinProductMissingWarningAsync(partNo, TimeSpan.FromMilliseconds(1500)))
+        var searchState = await WaitForBinProductLookupSearchResultAsync(popup, partNo, TimeSpan.FromMilliseconds(1800));
+        if (searchState == BinProductLookupSearchState.Missing)
         {
             _logger.Warn($"BIN 품목 코드 미존재. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
             return false;
         }
 
-        SendKeys.SendWait("{ENTER}");
-        await Task.Delay(500);
-        popup = FindPopupWindow(IsBinProductLookupPopupWindow);
-        if (popup is not null)
+        if (searchState != BinProductLookupSearchState.Found)
         {
             _logger.Warn($"BIN 품목 코드 검색 결과 없음. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
             return false;
+        }
+
+        SendKeys.SendWait("{ENTER}");
+        _logger.Info($"BIN 품목 코드 팝업 확인 Enter 전송. part='{partNo}'");
+        await Task.Delay(300);
+
+        if (await TryDismissBinProductMissingWarningAsync(popup, partNo))
+        {
+            _logger.Warn($"BIN 품목 코드 미존재. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
+            return false;
+        }
+
+        if (popupHandle != IntPtr.Zero)
+        {
+            if (!await WaitForNativeWindowClosedAsync(popupHandle, TimeSpan.FromMilliseconds(1200)))
+            {
+                _logger.Warn($"BIN 품목 코드 검색 결과 없음. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
+                return false;
+            }
+        }
+        else
+        {
+            popup = FindPopupWindow(IsBinProductLookupPopupWindow);
+            if (popup is not null)
+            {
+                _logger.Warn($"BIN 품목 코드 검색 결과 없음. 검색 팝업 유지 후 다음 Part 진행. part='{partNo}'");
+                return false;
+            }
         }
 
         _logger.Info($"BIN 품목 코드 검색 선택 완료. part='{partNo}'");
         return true;
     }
 
-    private async Task<bool> WaitAndDismissBinProductMissingWarningAsync(string partNo, TimeSpan timeout)
+    private enum BinProductLookupSearchState
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await DismissBinProductMissingWarningAsync(partNo))
-            {
-                return true;
-            }
+        None,
+        Found,
+        Missing
+    }
 
-            await Task.Delay(100);
-        }
-
-        return false;
+    private AutomationElement? FindBinProductLookupCodeEdit(AutomationElement popup)
+    {
+        return FindEditNextToLabel(popup, "품목 코드")
+               ?? FindDescendants(popup, ControlType.Edit)
+                   .Select(edit => new
+                   {
+                       Edit = edit,
+                       Rect = SafeReadRect(() => edit.Current.BoundingRectangle)
+                   })
+                   .Where(x => x.Rect.HasValue && !x.Rect.Value.IsEmpty)
+                   .OrderBy(x => x.Rect!.Value.Top)
+                   .ThenBy(x => x.Rect!.Value.Left)
+                   .FirstOrDefault()?.Edit;
     }
 
     private bool OpenBinProductLookupPopup(AutomationElement binWindow, AutomationElement partIdEdit)
@@ -697,9 +734,66 @@ public sealed class UnimesApp
             .FirstOrDefault()?.Button;
     }
 
-    private async Task<bool> DismissBinProductMissingWarningAsync(string partNo)
+    private async Task<BinProductLookupSearchState> WaitForBinProductLookupSearchResultAsync(
+        AutomationElement lookupPopup,
+        string partNo,
+        TimeSpan timeout)
     {
-        var warning = FindWarningDialogByTextFast(["971001", "존재하지"]);
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await TryDismissBinProductMissingWarningAsync(lookupPopup, partNo))
+            {
+                return BinProductLookupSearchState.Missing;
+            }
+
+            if (!HasForeignSmallForegroundWindow(GetNativeHandle(lookupPopup)) &&
+                HasPopupDataRows(lookupPopup))
+            {
+                return BinProductLookupSearchState.Found;
+            }
+
+            await Task.Delay(80);
+        }
+
+        if (await TryDismissBinProductMissingWarningAsync(lookupPopup, partNo))
+        {
+            return BinProductLookupSearchState.Missing;
+        }
+
+        if (HasForeignSmallForegroundWindow(GetNativeHandle(lookupPopup)))
+        {
+            return BinProductLookupSearchState.None;
+        }
+
+        return HasPopupDataRows(lookupPopup)
+            ? BinProductLookupSearchState.Found
+            : BinProductLookupSearchState.None;
+    }
+
+    private async Task<bool> TryDismissBinProductMissingWarningAsync(AutomationElement lookupPopup, string partNo)
+    {
+        var lookupHandle = GetNativeHandle(lookupPopup);
+        if (TryClickFocusedConfirmOutsideLookup(lookupHandle))
+        {
+            _logger.Warn($"BIN 품목 코드 미존재 경고 focused [확인] 처리. part='{partNo}'");
+            await Task.Delay(250);
+            return true;
+        }
+
+        if (TryClickForegroundConfirmOutsideLookup(lookupHandle))
+        {
+            _logger.Warn($"BIN 품목 코드 미존재 경고 foreground [확인] 처리. part='{partNo}'");
+            await Task.Delay(250);
+            return true;
+        }
+
+        if (HasForeignSmallForegroundWindow(lookupHandle))
+        {
+            return false;
+        }
+
+        var warning = FindBinProductMissingWarningWindow(lookupHandle);
         if (warning is null)
         {
             return false;
@@ -709,23 +803,192 @@ public sealed class UnimesApp
         if (ok is not null)
         {
             ClickElement(ok, "BIN product missing warning confirm");
-            await Task.Delay(300);
+            _logger.Warn($"BIN 품목 코드 미존재 경고 [확인] 처리. part='{partNo}'");
+        }
+        else if (GetNativeHandle(warning) == GetForegroundWindow())
+        {
+            SendKeys.SendWait("{ENTER}");
+            _logger.Warn($"BIN 품목 코드 미존재 경고 Enter 처리. part='{partNo}'");
         }
         else
         {
-            SendKeys.SendWait("{ENTER}");
-            await Task.Delay(300);
+            return false;
         }
 
-        _logger.Warn($"BIN 품목 코드 미존재 경고 처리. part='{partNo}'");
+        await Task.Delay(250);
         return true;
     }
 
-    private void DismissFocusedDialogByEnter(string partNo)
+    private AutomationElement? FindBinProductMissingWarningWindow(IntPtr lookupHandle)
     {
+        var foreground = GetForegroundWindow();
+        if (foreground != IntPtr.Zero && foreground != lookupHandle)
+        {
+            var foregroundWindow = TryFromHandle(foreground);
+            if (IsBinProductMissingWarningCandidate(foregroundWindow, lookupHandle))
+            {
+                return foregroundWindow;
+            }
+        }
+
+        foreach (var window in EnumerateSmallPopupWindows())
+        {
+            if (IsBinProductMissingWarningCandidate(window, lookupHandle))
+            {
+                return window;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsBinProductMissingWarningCandidate(AutomationElement? window, IntPtr lookupHandle)
+    {
+        if (window is null || !IsSmallPopupCandidate(window))
+        {
+            return false;
+        }
+
+        var handle = GetNativeHandle(window);
+        if (lookupHandle != IntPtr.Zero && handle == lookupHandle)
+        {
+            return false;
+        }
+
+        return WindowContainsAllText(window, ["971001", "존재하지"]);
+    }
+
+    private bool HasPopupDataRows(AutomationElement popup)
+    {
+        return FindDescendants(popup, ControlType.DataItem).Any();
+    }
+
+    private bool TryClickFocusedConfirmOutsideLookup(IntPtr lookupHandle)
+    {
+        AutomationElement focused;
+        try
+        {
+            focused = AutomationElement.FocusedElement;
+        }
+        catch
+        {
+            return false;
+        }
+
+        var name = SafeRead(() => focused.Current.Name) ?? "";
+        var controlType = SafeRead(() => focused.Current.ControlType);
+        if (controlType != ControlType.Button ||
+            !new[] { "확인", "OK" }.Any(candidate => name.Contains(candidate, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var window = GetContainingWindow(focused);
+        if (window is null || !IsSmallPopupCandidate(window))
+        {
+            return false;
+        }
+
+        var focusedWindowHandle = GetNativeHandle(window);
+        if (lookupHandle != IntPtr.Zero && focusedWindowHandle == lookupHandle)
+        {
+            return false;
+        }
+
+        ClickElement(focused, "BIN product missing warning focused confirm");
+        return true;
+    }
+
+    private bool TryClickForegroundConfirmOutsideLookup(IntPtr lookupHandle)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || foreground == lookupHandle)
+        {
+            return false;
+        }
+
+        var foregroundWindow = TryFromHandle(foreground);
+        if (foregroundWindow is null || !IsSmallPopupCandidate(foregroundWindow))
+        {
+            return false;
+        }
+
+        var ok = FindDirectChildButtonByAnyName(foregroundWindow, ["확인", "OK"]);
+        if (ok is not null)
+        {
+            ClickElement(ok, "BIN product missing warning foreground confirm");
+            if (WaitForNativeWindowNoLongerForeground(foreground, TimeSpan.FromMilliseconds(500)))
+            {
+                return true;
+            }
+        }
+
+        ClickForegroundConfirmFallbackByCoordinates(foregroundWindow);
+        if (WaitForNativeWindowNoLongerForeground(foreground, TimeSpan.FromMilliseconds(500)))
+        {
+            return true;
+        }
+
         SendKeys.SendWait("{ENTER}");
-        Thread.Sleep(300);
-        _logger.Warn($"BIN 품목 코드 미존재 경고 Enter 처리. part='{partNo}'");
+        if (WaitForNativeWindowNoLongerForeground(foreground, TimeSpan.FromMilliseconds(400)))
+        {
+            return true;
+        }
+
+        SendKeys.SendWait(" ");
+        return WaitForNativeWindowNoLongerForeground(foreground, TimeSpan.FromMilliseconds(400));
+    }
+
+    private static void ClickForegroundConfirmFallbackByCoordinates(AutomationElement foregroundWindow)
+    {
+        var rect = SafeReadRect(() => foregroundWindow.Current.BoundingRectangle);
+        if (!rect.HasValue || rect.Value.IsEmpty)
+        {
+            return;
+        }
+
+        Cursor.Position = new System.Drawing.Point(
+            (int)(rect.Value.Right - 60),
+            (int)(rect.Value.Bottom - 20));
+        MouseClick();
+    }
+
+    private AutomationElement? FindDirectChildButtonByAnyName(AutomationElement root, IReadOnlyCollection<string> names)
+    {
+        AutomationElementCollection buttons;
+        try
+        {
+            buttons = root.FindAll(
+                TreeScope.Children,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+        }
+        catch
+        {
+            return null;
+        }
+
+        foreach (AutomationElement button in buttons)
+        {
+            var name = SafeRead(() => button.Current.Name) ?? "";
+            if (names.Any(candidate => name.Contains(candidate, StringComparison.OrdinalIgnoreCase)))
+            {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    private bool HasForeignSmallForegroundWindow(IntPtr lookupHandle)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || foreground == lookupHandle)
+        {
+            return false;
+        }
+
+        var foregroundWindow = TryFromHandle(foreground);
+        return foregroundWindow is not null && IsSmallPopupCandidate(foregroundWindow);
     }
 
     private async Task<bool> HandleOpenPartIdPopupFastAsync(string originalPart)
@@ -2254,6 +2517,42 @@ public sealed class UnimesApp
                rect.Value.Height is > 0 and <= 700;
     }
 
+    private IEnumerable<AutomationElement> EnumerateSmallPopupWindows()
+    {
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (IsSmallPopupCandidate(window))
+            {
+                yield return window;
+            }
+
+            if (!IsUnimesCandidate(window))
+            {
+                continue;
+            }
+
+            AutomationElementCollection children;
+            try
+            {
+                children = window.FindAll(
+                    TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (AutomationElement child in children)
+            {
+                if (IsSmallPopupCandidate(child))
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+
     private bool WindowContainsAnyText(AutomationElement window, IReadOnlyCollection<string> tokens)
     {
         return FindDescendants(window, null)
@@ -2261,6 +2560,18 @@ public sealed class UnimesApp
             .Any(name => tokens.Any(token =>
                 !string.IsNullOrWhiteSpace(token) &&
                 name.Contains(token, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private bool WindowContainsAllText(AutomationElement window, IReadOnlyCollection<string> tokens)
+    {
+        var names = FindDescendants(window, null)
+            .Select(element => SafeRead(() => element.Current.Name) ?? "")
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+
+        return tokens.All(token =>
+            !string.IsNullOrWhiteSpace(token) &&
+            names.Any(name => name.Contains(token, StringComparison.OrdinalIgnoreCase)));
     }
 
     private bool IsMissingPartWarningWindow(AutomationElement window)
@@ -3125,6 +3436,66 @@ public sealed class UnimesApp
         }
     }
 
+    private static IntPtr GetNativeHandle(AutomationElement element)
+    {
+        var handle = SafeReadInt(() => element.Current.NativeWindowHandle);
+        return handle.HasValue && handle.Value != 0 ? new IntPtr(handle.Value) : IntPtr.Zero;
+    }
+
+    private static AutomationElement? TryFromHandle(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            return AutomationElement.FromHandle(handle);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsNativeWindowAlive(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && IsWindow(handle) && IsWindowVisible(handle);
+    }
+
+    private static async Task<bool> WaitForNativeWindowClosedAsync(IntPtr handle, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!IsNativeWindowAlive(handle))
+            {
+                return true;
+            }
+
+            await Task.Delay(80);
+        }
+
+        return !IsNativeWindowAlive(handle);
+    }
+
+    private static bool WaitForNativeWindowNoLongerForeground(IntPtr handle, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!IsNativeWindowAlive(handle) || GetForegroundWindow() != handle)
+            {
+                return true;
+            }
+
+            Thread.Sleep(80);
+        }
+
+        return !IsNativeWindowAlive(handle) || GetForegroundWindow() != handle;
+    }
+
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -3145,6 +3516,12 @@ public sealed class UnimesApp
 
     [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
