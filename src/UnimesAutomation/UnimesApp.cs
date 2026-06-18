@@ -565,20 +565,12 @@ public sealed class UnimesApp
                     continue;
                 }
 
-                if (!ClickInsertRow(mainWindow))
-                {
-                    _logger.Error($"BIN 행추가 실패. part='{request.PartNo}'");
-                    RecordResult("ERROR", "NO", "BIN 행추가 실패");
-                    continue;
-                }
-
-                await Task.Delay(400);
                 if (!IsElementUsable(binWindow))
                 {
                     binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
                 }
 
-                var row = FindNewBinRow(binWindow);
+                var row = await InsertBinRowAsync(mainWindow, binWindow);
                 if (row is null)
                 {
                     _logger.Error($"BIN 추가 행 미발견. part='{request.PartNo}'");
@@ -1157,20 +1149,54 @@ public sealed class UnimesApp
         _logger.Info("BIN 조회 버튼 mouse click 전송.");
     }
 
+    private async Task<AutomationElement?> InsertBinRowAsync(AutomationElement mainWindow, AutomationElement binWindow)
+    {
+        var before = CountBinInfoRows(binWindow);
+        if (ClickInsertRow(mainWindow))
+        {
+            var row = await WaitForNewBinRowAsync(binWindow, before, TimeSpan.FromMilliseconds(1200));
+            if (row is not null)
+            {
+                return row;
+            }
+
+            _logger.Warn("BIN 행추가 버튼 클릭 후 새 행 미감지. Ctrl+Insert fallback 사용.");
+        }
+
+        if (!TrySendBinInsertShortcut(binWindow, mainWindow))
+        {
+            return null;
+        }
+
+        return await WaitForNewBinRowAsync(binWindow, before, TimeSpan.FromMilliseconds(2000));
+    }
+
     private bool ClickInsertRow(AutomationElement mainWindow)
     {
         var insert = FindButtonByAutomationIdContains(mainWindow, "Tool : InsertRow")
             ?? FindButtonByAnyName(mainWindow, ["행추가"]);
         if (insert is not null)
         {
-            ClickElement(insert, "BIN insert row");
+            _safety.EnsureCanClick(insert, "BIN insert row");
+            BringToFront(GetContainingWindow(insert));
+            ClickElementCenterByMouse(insert);
             _logger.Info("BIN 행추가 버튼 클릭.");
             return true;
         }
 
+        return TrySendBinInsertShortcut(null, mainWindow);
+    }
+
+    private bool TrySendBinInsertShortcut(AutomationElement? binWindow, AutomationElement mainWindow)
+    {
         try
         {
             BringToFront(mainWindow);
+            if (binWindow is not null)
+            {
+                FocusBinSelectionGrid(binWindow);
+            }
+
             SendKeys.SendWait("^{INSERT}");
             _logger.Info("BIN 행추가 Ctrl+Insert 전송.");
             return true;
@@ -1182,10 +1208,48 @@ public sealed class UnimesApp
         }
     }
 
-    private AutomationElement? FindNewBinRow(AutomationElement binWindow)
+    private async Task<AutomationElement?> WaitForNewBinRowAsync(AutomationElement binWindow, int before, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var rows = FindBinInfoRows(binWindow);
+            if (rows.Count > before)
+            {
+                return rows
+                    .Select(row => new
+                    {
+                        Row = row,
+                        Rect = SafeReadRect(() => row.Current.BoundingRectangle)
+                    })
+                    .Where(x => x.Rect.HasValue && !x.Rect.Value.IsEmpty)
+                    .OrderBy(x => x.Rect!.Value.Top)
+                    .LastOrDefault()?.Row;
+            }
+
+            if (before == 0 && rows.Count > 0)
+            {
+                return rows[0];
+            }
+
+            await Task.Delay(100);
+        }
+
+        return null;
+    }
+
+    private int CountBinInfoRows(AutomationElement binWindow) => FindBinInfoRows(binWindow).Count;
+
+    private List<AutomationElement> FindBinInfoRows(AutomationElement binWindow)
     {
         return FindDescendants(binWindow, ControlType.DataItem)
             .Where(IsBinInfoRow)
+            .ToList();
+    }
+
+    private AutomationElement? FindNewBinRow(AutomationElement binWindow)
+    {
+        return FindBinInfoRows(binWindow)
             .Select(row => new
             {
                 Row = row,
@@ -1205,6 +1269,29 @@ public sealed class UnimesApp
         return editNames.Contains("품목ID") &&
                editNames.Contains("공정명") &&
                editNames.Contains("BIN ID");
+    }
+
+    private void FocusBinSelectionGrid(AutomationElement binWindow)
+    {
+        var group = FindDescendants(binWindow, ControlType.Group)
+            .FirstOrDefault(element => string.Equals(
+                SafeRead(() => element.Current.Name) ?? "",
+                "BIN 정보 선택",
+                StringComparison.Ordinal));
+        var rect = group is null
+            ? SafeReadRect(() => binWindow.Current.BoundingRectangle)
+            : SafeReadRect(() => group.Current.BoundingRectangle);
+
+        if (!rect.HasValue || rect.Value.IsEmpty)
+        {
+            return;
+        }
+
+        Cursor.Position = new System.Drawing.Point(
+            (int)(rect.Value.Left + Math.Min(rect.Value.Width - 10, 40)),
+            (int)(rect.Value.Top + Math.Min(rect.Value.Height - 10, 70)));
+        MouseClick();
+        Thread.Sleep(100);
     }
 
     private async Task<bool> SelectProcessPopupAsync(AutomationElement row, string processKey)
@@ -2914,6 +3001,15 @@ public sealed class UnimesApp
         var credentials = ResolveLoginCredentials();
 
         var fields = FindLoginEditFields(loginWindow);
+        if (credentials is not null && (fields.UserId is null || fields.Password is null))
+        {
+            _logger.Warn("Login Edit controls were not fully exposed by UIA. Falling back to coordinate-based login input.");
+            _screenshots.CaptureElement(loginWindow, "login_coordinate_input_fallback");
+            FillLoginCredentialsByCoordinates(loginWindow, credentials.Value);
+            await ClickLoginSubmitAsync(loginWindow);
+            return;
+        }
+
         if (fields.UserId is null && fields.Password is null)
         {
             _logger.Warn("No Edit controls found on login screen. UIA may not expose login fields.");
@@ -2944,15 +3040,7 @@ public sealed class UnimesApp
             SetElementText(fields.Password, credentials.Value.Password, "login password");
             _logger.Info($"Login password filled. source={credentials.Value.Source}. Password value is not logged.");
 
-            var loginButton = await WaitForLoginButtonAsync(loginWindow, TimeSpan.FromSeconds(8));
-            if (loginButton is null)
-            {
-                _screenshots.CaptureElement(loginWindow, "login_button_not_found");
-                throw new InvalidOperationException("Login button was not found.");
-            }
-
-            ClickElement(loginButton, "login submit");
-            _logger.Info("Login button clicked.");
+            await ClickLoginSubmitAsync(loginWindow);
         }
         else
         {
@@ -3001,6 +3089,43 @@ public sealed class UnimesApp
         }
 
         return (edits[0].Element, edits[1].Element);
+    }
+
+    private void FillLoginCredentialsByCoordinates(
+        AutomationElement loginWindow,
+        (string UserId, string Password, string Source) credentials)
+    {
+        // The UNIMES login form has ID and password on the same row:
+        // left field = user id, right field = password. The rows below are language/server combo boxes.
+        SetLoginTextByCoordinates(loginWindow, 0.625, 0.529, credentials.UserId);
+        _logger.Info($"Login user id filled by coordinates. source={credentials.Source}");
+
+        SetLoginTextByCoordinates(loginWindow, 0.785, 0.529, credentials.Password);
+        _logger.Info($"Login password filled by coordinates. source={credentials.Source}. Password value is not logged.");
+    }
+
+    private static void SetLoginTextByCoordinates(AutomationElement loginWindow, double relativeX, double relativeY, string text)
+    {
+        ClickLoginPoint(loginWindow, relativeX, relativeY);
+        Thread.Sleep(100);
+        SendKeys.SendWait("^a");
+        SendKeys.SendWait("{BACKSPACE}");
+        SendKeys.SendWait(EscapeForSendKeys(text));
+    }
+
+    private async Task ClickLoginSubmitAsync(AutomationElement loginWindow)
+    {
+        var loginButton = await WaitForLoginButtonAsync(loginWindow, TimeSpan.FromSeconds(8));
+        if (loginButton is not null)
+        {
+            ClickElement(loginButton, "login submit");
+            _logger.Info("Login button clicked.");
+            return;
+        }
+
+        _screenshots.CaptureElement(loginWindow, "login_button_not_found");
+        ClickLoginSubmitByCoordinates(loginWindow);
+        _logger.Warn("Login button UIA element was not found. Coordinate fallback clicked.");
     }
 
     private (string UserId, string Password, string Source)? ResolveLoginCredentials()
@@ -3097,6 +3222,22 @@ public sealed class UnimesApp
 
     private AutomationElement? FindVisibleLoginTryAgainElement(AutomationElement loginWindow)
     {
+        var loginRect = SafeReadRect(() => loginWindow.Current.BoundingRectangle);
+        if (!loginRect.HasValue || loginRect.Value.IsEmpty)
+        {
+            return null;
+        }
+
+        if (!HasVisibleLoginServerError(loginWindow, loginRect.Value))
+        {
+            return null;
+        }
+
+        if (HasVisibleLoginServerSelection(loginWindow, loginRect.Value))
+        {
+            return null;
+        }
+
         return FindDescendants(loginWindow, null)
             .Select(element => new
             {
@@ -3108,13 +3249,81 @@ public sealed class UnimesApp
             .Where(candidate => candidate.ContainsTryAgain &&
                                 candidate.Rect.HasValue &&
                                 !candidate.Rect.Value.IsEmpty &&
-                                !candidate.Offscreen)
+                                !candidate.Offscreen &&
+                                IsLoginTryAgainLinkRect(candidate.Rect.Value, loginRect.Value))
             .OrderBy(candidate => candidate.Rect!.Value.Top)
             .ThenBy(candidate => candidate.Rect!.Value.Left)
             .FirstOrDefault()?.Element;
     }
 
+    private bool HasVisibleLoginServerError(AutomationElement loginWindow, System.Windows.Rect loginRect)
+    {
+        return FindDescendants(loginWindow, null)
+            .Select(element => new
+            {
+                Rect = SafeReadRect(() => element.Current.BoundingRectangle),
+                Offscreen = SafeRead(() => element.Current.IsOffscreen),
+                ContainsError = ElementContainsAnyText(element, ["서버가 응답", "응답하지 않습니다"])
+            })
+            .Any(candidate => candidate.ContainsError &&
+                              candidate.Rect.HasValue &&
+                              !candidate.Rect.Value.IsEmpty &&
+                              !candidate.Offscreen &&
+                              IsLoginTopWarningRect(candidate.Rect.Value, loginRect));
+    }
+
+    private bool HasVisibleLoginServerSelection(AutomationElement loginWindow, System.Windows.Rect loginRect)
+    {
+        return FindDescendants(loginWindow, null)
+            .Select(element => new
+            {
+                Rect = SafeReadRect(() => element.Current.BoundingRectangle),
+                Offscreen = SafeRead(() => element.Current.IsOffscreen),
+                ContainsServer = ElementContainsAnyText(element, ["UNIMES"])
+            })
+            .Any(candidate => candidate.ContainsServer &&
+                              candidate.Rect.HasValue &&
+                              !candidate.Rect.Value.IsEmpty &&
+                              !candidate.Offscreen &&
+                              IsLoginServerSelectionRect(candidate.Rect.Value, loginRect));
+    }
+
+    private static bool IsLoginTryAgainLinkRect(System.Windows.Rect rect, System.Windows.Rect loginRect)
+    {
+        return IsLoginTopWarningRect(rect, loginRect) &&
+               rect.Left >= loginRect.Left + loginRect.Width * 0.25 &&
+               rect.Left <= loginRect.Left + loginRect.Width * 0.50 &&
+               rect.Width <= loginRect.Width * 0.20;
+    }
+
+    private static bool IsLoginTopWarningRect(System.Windows.Rect rect, System.Windows.Rect loginRect)
+    {
+        return rect.Top >= loginRect.Top &&
+               rect.Top <= loginRect.Top + loginRect.Height * 0.18 &&
+               rect.Left >= loginRect.Left + loginRect.Width * 0.05 &&
+               rect.Left <= loginRect.Left + loginRect.Width * 0.55 &&
+               rect.Height <= loginRect.Height * 0.08;
+    }
+
+    private static bool IsLoginServerSelectionRect(System.Windows.Rect rect, System.Windows.Rect loginRect)
+    {
+        return rect.Left >= loginRect.Left + loginRect.Width * 0.50 &&
+               rect.Left <= loginRect.Left + loginRect.Width * 0.90 &&
+               rect.Top >= loginRect.Top + loginRect.Height * 0.60 &&
+               rect.Top <= loginRect.Top + loginRect.Height * 0.70;
+    }
+
     private static void ClickLoginTryAgainByCoordinates(AutomationElement loginWindow)
+    {
+        ClickLoginPoint(loginWindow, 0.375, 0.098);
+    }
+
+    private static void ClickLoginSubmitByCoordinates(AutomationElement loginWindow)
+    {
+        ClickLoginPoint(loginWindow, 0.604, 0.710);
+    }
+
+    private static void ClickLoginPoint(AutomationElement loginWindow, double relativeX, double relativeY)
     {
         var rect = loginWindow.Current.BoundingRectangle;
         if (rect.IsEmpty)
@@ -3122,9 +3331,9 @@ public sealed class UnimesApp
             return;
         }
 
-        var x = (int)(rect.Left + Math.Min(rect.Width - 10, Math.Max(10, rect.Width * 0.37)));
-        var y = (int)(rect.Top + Math.Min(rect.Height - 10, 42));
-        Cursor.Position = new System.Drawing.Point(x, y);
+        Cursor.Position = new System.Drawing.Point(
+            (int)(rect.Left + rect.Width * relativeX),
+            (int)(rect.Top + rect.Height * relativeY));
         MouseClick();
     }
 

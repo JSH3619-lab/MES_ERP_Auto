@@ -8,7 +8,7 @@
 ## 한눈에 (현재 상태)
 
 - 실행: `run_unimes_automation_save_test.cmd` (= `appsettings.save-test.json`, **dryRun=false / saveEnabled=true** → 실제 저장).
-- 진행도: **900014/BIN Type/완료 알림 정상 동작 확인. 닫힌 업무창 메뉴 진입, 메뉴찾기 재활성화, 로그인 자동화 1차 수정 완료. 다음 세션 live 재검증 필요.**
+- 진행도: **2026-06-18 live 검증 완료. 자동 로그인 → 품목정보관리 저장 → 품목별 BIN 정보 관리 행추가/입력/저장까지 처음부터 끝까지 성공.**
 - 한 번은 끝까지 가서 저장됨(`run_20260617_164...`, `BIN saved`). 단 그땐 콤보 3개가 빈 값이었고(아래 해결), MES 창이 보이는 상태였음.
 
 ---
@@ -86,6 +86,11 @@
 - 추가 수정: `run_20260618_155424.log`에서 100x100 `frmInitial` 로딩창을 초기 UNIMES 창으로 잡은 뒤 실제 로그인창을 다시 감지하지 않아 멈춘 흐름을 확인했다. 초기 창이 로그인/메인이 아니면 `WaitForLoginOrMainWindowAsync`로 로그인창 또는 메인창이 뜰 때까지 다시 기다리도록 변경했다.
 - Continue 팝업이 뜨면 `오늘 보지 않기` 체크박스를 먼저 찾아 클릭한 뒤 `Continue`를 누른다. 체크박스가 없거나 이미 오늘 숨김 상태라 팝업이 안 뜨면 기존처럼 넘어간다.
 - `run_20260618_163600.log`에서는 화면에 `Try again`이 없는데 숨은 UIA 텍스트 때문에 Try again 상태로 오판했다. 이제 실제 보이는 `Try again` 요소가 있을 때만 클릭하고, 로그인 `Edit`는 화면 좌표 기준 위쪽 2개를 ID/PW로 선택한다.
+- 최종 보정:
+  - `Try again`은 상단 서버 오류 문구 + 상단 `Try again` 링크 + 서버 선택칸에 `UNIMES`가 없는 상태를 함께 만족할 때만 감지한다.
+  - 로그인 입력칸 UIA 노출 실패 시 좌표 fallback을 사용하되, ID/PW가 같은 행에 있으므로 왼쪽 칸=ID, 오른쪽 칸=PW로 입력한다.
+  - BIN 행추가는 클릭 로그만 성공으로 보지 않고 실제 `BIN 정보 선택` 그리드에 새 행이 생겼는지 확인한다. 버튼 클릭 후 새 행이 없으면 그리드 포커스 후 `Ctrl+Insert`로 fallback한다.
+  - 사용자 live 확인: 자동 로그인부터 품목정보관리, BIN 정보 관리 저장까지 전체 흐름 정상 완료.
 
 1. `ConfirmNoDataPopupAsync`가 메인 `ShellForm` descendants를 훑지 않도록 900014 전용 `FindNoDataDialog`를 추가했다.
    - top-level MES 창 중 메인 `ShellForm`은 direct child `Window`만 검사한다.
@@ -114,17 +119,7 @@
 
 ## 다음 세션 바로 할 일
 
-1. **로그인 live 재검증.**
-   - 기대 로그: `Login visible Edit controls found: 2` → `Login user id filled. source=config` → `Login password filled. source=config` → `Login button clicked.`
-   - 실패 시 최신 `run_*.log`의 `login edit[0/1]` 좌표와 로그인 화면 스크린샷을 먼저 확인한다.
-2. **Continue 팝업 처리 확인.**
-   - 팝업이 뜨면 `Continue popup '오늘 보지 않기' checked.` → `Continue popup clicked.` 로그를 기대한다.
-   - MES에서 이미 오늘 숨김이면 팝업 없이 넘어가는 것이 정상.
-3. **품목정보관리 → BIN 정보 관리 연속 전환 확인.**
-   - 닫힌 업무창 상태에서 `품목정보관리` 진입 후 `품목별 BIN 정보 관리`로 넘어가는지 확인한다.
-   - 기대 로그: `메뉴찾기 입력칸 직접 활성화` 또는 fallback `트리 메뉴 직접 더블클릭`.
-4. **BIN 저장 흐름 최종 확인.**
-   - 기대 로그: `BIN 900014 경고 [확인]/Enter 처리` → `BIN 조회 버튼 mouse click 전송` → `BIN cell set ... BIN Type` → `BIN saved` 또는 검증 경고 시 ERROR 처리.
+- 현재 기준 필수 재검증 항목 없음. 새 이슈가 생기면 최신 `logs/run_*.log`, 대응 스크린샷, `ui_dump_*.txt`부터 확인한다.
 
 ---
 
