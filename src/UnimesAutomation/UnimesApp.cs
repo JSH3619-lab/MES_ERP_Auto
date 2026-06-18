@@ -13,6 +13,11 @@ public sealed class UnimesApp
     private readonly ScreenshotService _screenshots;
     private readonly SafetyGuard _safety;
 
+    private sealed record WorkflowRunResult(
+        List<PartRequest> ValidParts,
+        List<PartResult> Results,
+        string OutputPath);
+
     public UnimesApp(
         RootConfig config,
         RuntimePaths paths,
@@ -156,19 +161,33 @@ public sealed class UnimesApp
         {
             var scope = _config.Workflow.RuntimeWorkScope;
             List<PartRequest> binParts = _config.Workflow.RuntimePartRequests.ToList();
+            var combinedResults = new List<PartResult>();
+            var combinedOutputPaths = new List<string>();
 
             if (scope == WorkScope.ItemInfo || scope == WorkScope.Both)
             {
-                var valid = await RunItemInfoWorkflowAsync(mainWindow);
+                var itemRun = await RunItemInfoWorkflowAsync(mainWindow, showCompletionDialog: scope == WorkScope.ItemInfo);
                 if (scope == WorkScope.Both)
                 {
-                    binParts = valid;
+                    binParts = itemRun.ValidParts;
+                    combinedResults.AddRange(itemRun.Results);
+                    AddOutputPath(combinedOutputPaths, itemRun.OutputPath);
                 }
             }
 
             if (scope == WorkScope.BinInfo || scope == WorkScope.Both)
             {
-                await RunBinInfoWorkflowAsync(mainWindow, binParts);
+                var binRun = await RunBinInfoWorkflowAsync(mainWindow, binParts, showCompletionDialog: scope == WorkScope.BinInfo);
+                if (scope == WorkScope.Both)
+                {
+                    combinedResults.AddRange(binRun.Results);
+                    AddOutputPath(combinedOutputPaths, binRun.OutputPath);
+                }
+            }
+
+            if (scope == WorkScope.Both && combinedResults.Count > 0)
+            {
+                ShowCompletionDialog(combinedResults, combinedOutputPaths);
             }
         }
 
@@ -176,7 +195,7 @@ public sealed class UnimesApp
         return 0;
     }
 
-    private async Task<List<PartRequest>> RunItemInfoWorkflowAsync(AutomationElement mainWindow)
+    private async Task<WorkflowRunResult> RunItemInfoWorkflowAsync(AutomationElement mainWindow, bool showCompletionDialog)
     {
         var inputPath = "";
         IReadOnlyList<PartRequest> requests;
@@ -194,7 +213,7 @@ public sealed class UnimesApp
         if (requests.Count == 0)
         {
             _logger.Warn($"No Part No entries found. input='{inputPath}'");
-            return [];
+            return new WorkflowRunResult([], [], "");
         }
 
         _logger.Info($"품목정보관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -440,16 +459,23 @@ public sealed class UnimesApp
         var outputPath = CsvFiles.WriteResults(_paths.OutputDirectory, _paths.Timestamp, results);
         _logger.Info($"품목정보관리 result CSV saved: {outputPath}");
 
-        ShowCompletionDialog(results, outputPath);
-        return validParts;
+        if (showCompletionDialog)
+        {
+            ShowCompletionDialog(results, outputPath);
+        }
+
+        return new WorkflowRunResult(validParts, results, outputPath);
     }
 
-    private async Task RunBinInfoWorkflowAsync(AutomationElement mainWindow, IReadOnlyList<PartRequest> requests)
+    private async Task<WorkflowRunResult> RunBinInfoWorkflowAsync(
+        AutomationElement mainWindow,
+        IReadOnlyList<PartRequest> requests,
+        bool showCompletionDialog)
     {
         if (requests.Count == 0)
         {
             _logger.Info("BIN 정보 관리 대상 Part 없음. 건너뜀.");
-            return;
+            return new WorkflowRunResult([], [], "");
         }
 
         _logger.Info($"품목별 BIN 정보 관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -643,13 +669,18 @@ public sealed class UnimesApp
             }
         }
 
+        var outputPath = "";
         if (results.Count > 0)
         {
-            var outputPath = CsvFiles.WriteResults(_paths.OutputDirectory, $"{_paths.Timestamp}_bin", results);
-            ShowCompletionDialog(results, outputPath);
+            outputPath = CsvFiles.WriteResults(_paths.OutputDirectory, $"{_paths.Timestamp}_bin", results);
+            if (showCompletionDialog)
+            {
+                ShowCompletionDialog(results, outputPath);
+            }
         }
 
         _logger.Info("품목별 BIN 정보 관리 workflow finished.");
+        return new WorkflowRunResult([], results, outputPath);
     }
 
     private AutomationElement? FindBinPartIdEdit(AutomationElement binWindow)
@@ -1724,6 +1755,11 @@ public sealed class UnimesApp
 
     private void ShowCompletionDialog(IReadOnlyList<PartResult> results, string outputPath)
     {
+        ShowCompletionDialog(results, [outputPath]);
+    }
+
+    private void ShowCompletionDialog(IReadOnlyList<PartResult> results, IReadOnlyList<string> outputPaths)
+    {
         if (!_config.Workflow.ShowCompletionDialog)
         {
             return;
@@ -1753,7 +1789,18 @@ public sealed class UnimesApp
         }
 
         builder.AppendLine();
-        builder.AppendLine($"결과 CSV: {outputPath}");
+        if (outputPaths.Count == 1)
+        {
+            builder.AppendLine($"결과 CSV: {outputPaths[0]}");
+        }
+        else if (outputPaths.Count > 1)
+        {
+            builder.AppendLine("결과 CSV:");
+            foreach (var outputPath in outputPaths)
+            {
+                builder.AppendLine($" - {outputPath}");
+            }
+        }
 
         var icon = errors > 0 || skipped > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information;
         var title = errors > 0 || skipped > 0 ? "UNIMES 자동화 완료 - 확인 필요" : "UNIMES 자동화 완료";
@@ -1764,6 +1811,14 @@ public sealed class UnimesApp
         catch (Exception ex)
         {
             _logger.Warn($"Completion dialog failed: {ex.Message}");
+        }
+    }
+
+    private static void AddOutputPath(List<string> outputPaths, string outputPath)
+    {
+        if (!string.IsNullOrWhiteSpace(outputPath))
+        {
+            outputPaths.Add(outputPath);
         }
     }
 

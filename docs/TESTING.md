@@ -49,5 +49,5 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 1. 자동 로그인: 로그인 전 화면에서 ID/PW, 언어, 시스템 값이 보존되는지 확인.
 2. 작업 범위 `품목정보관리만`: 정상 Part와 미존재 Part를 섞어 실행.
 3. 작업 범위 `BIN 정보 관리만`: 품목 코드 팝업 선택 후 기존 행/신규 행 케이스 실행.
-4. 작업 범위 `둘 다`: 품목정보관리 완료 후 BIN 정보 관리로 자연스럽게 이어지는지 확인.
+4. 작업 범위 `둘 다`: 품목정보관리 완료창 없이 BIN 정보 관리로 이어지고, 전체 종료 후 결과창이 한 번만 뜨는지 확인.
 5. 저장 테스트: `dryRun=false`, `saveEnabled=true`인 로컬 설정으로만 제한 실행.
