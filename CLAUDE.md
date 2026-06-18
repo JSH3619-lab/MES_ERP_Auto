@@ -1,8 +1,8 @@
 # UNIMES 자동화 (MES_ERP_Auto) — 작업 필수 안내
 
 BIZENTRO **UNIMES** Windows 데스크톱 앱을 UI Automation(System.Windows.Automation)으로
-조작하는 .NET 8 / C# PoC. `품목정보관리` 화면에서 파트 목록을 받아 조회하고 BIN/불량창고
-등 셀 값을 맞추는 자동화다.
+조작하는 .NET 8 / C# 자동화다. 파트 목록을 받아 `품목정보관리`와 `품목별 BIN 정보 관리`
+작업을 선택 실행한다.
 
 > 이 파일은 **반드시 알아야 할 것만** 담는다. 상세는 각 서브 문서를 참조.
 
@@ -37,7 +37,6 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-on
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 코드 맵, 동작 흐름, 주요 창/컨트롤 automation id
 - [docs/CONFIG.md](docs/CONFIG.md) — `appsettings.json` 항목 전체
 - [docs/TESTING.md](docs/TESTING.md) — 실행/덤프/로그 확인 절차
-- 설계 원안: [docs/specs/2026-06-16-item-info-automation-design.md](docs/specs/2026-06-16-item-info-automation-design.md)
 
 ## 작업 원칙
 

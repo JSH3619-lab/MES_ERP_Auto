@@ -1,75 +1,28 @@
-# UNIMES Automation PoC
+# UNIMES Automation
 
-Windows desktop UI automation PoC for BIZENTRO UNIMES.
+BIZENTRO UNIMES Windows desktop app automation for item information and item-specific BIN setup.
 
-This first version focuses on a safe bootstrap flow:
+The app uses Windows UI Automation, not image/OCR recognition. Screenshots and UI dumps are saved only for diagnostics.
 
-- Launch the UNIMES ClickOnce shortcut (`.appref-ms`)
-- Find the UNIMES window
-- Detect the login screen
-- Fill the user id
-- Either wait for manual password/login, or use a local config password
-- Click the post-login `Continue` popup when present
-- Confirm the main window
-- Save screenshots and a UI Automation control dump
-- Navigate to `기준정보 > 품목관리 > 품목정보관리`
-- Read Part No values from `input_parts.csv`
-- Enter each Part No into the `품목명` search field
-- Execute 조회
-- Export best-effort Grid values to CSV
+## Current Workflow
 
-No save, register, delete, confirm, approve, or apply workflow is implemented.
+1. Launch or attach to UNIMES.
+2. Auto-login when credentials are configured.
+3. Ask for work scope: `품목정보관리만`, `BIN 정보 관리만`, or `둘 다`.
+4. Ask for Part No values.
+5. Run `품목정보관리`.
+6. Run `품목별 BIN 정보 관리` for valid/selected parts.
+7. Write result CSV and show a completion summary.
 
-## Requirements
+## Safety
 
-- Windows
-- .NET 8 Windows Desktop Runtime or newer
-- UNIMES client installed for the current user
+Default behavior is safe:
 
-No NuGet packages are required.
+- `dryRun=true`
+- `saveEnabled=false`
 
-## Files
-
-```text
-appsettings.example.json
-input_parts.example.csv
-src/UnimesAutomation/UnimesAutomation.csproj
-src/UnimesAutomation/Program.cs
-src/UnimesAutomation/UnimesApp.cs
-src/UnimesAutomation/UiDump.cs
-src/UnimesAutomation/SafetyGuard.cs
-src/UnimesAutomation/Models.cs
-src/UnimesAutomation/LoggerSetup.cs
-```
-
-Runtime folders are created automatically:
-
-```text
-logs/
-screenshots/
-output/
-```
-
-## Configuration
-
-Copy the example config if you want to override defaults:
-
-```powershell
-Copy-Item .\appsettings.example.json .\appsettings.json
-```
-
-Default launch target:
-
-```text
-C:\Users\RAMOS\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Bizentro\UNIMES - 1 .appref-ms
-```
-
-Password handling:
-
-- `manual`: the program fills the user id, focuses the password field, then waits for the user to log in.
-- `config`: the program uses the local `password` value from `appsettings.json`.
-
-Do not store a password in files unless your company policy allows it.
+Buttons containing save/delete/apply style keywords are blocked unless `saveEnabled=true`.
+Use `run_unimes_automation_save_test.cmd` only for an intentional save test with a local ignored config.
 
 ## Build
 
@@ -79,75 +32,46 @@ dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj
 
 ## Run
 
-Double-click:
-
-```text
-run_unimes_automation.cmd
+```powershell
+.\run_unimes_automation.cmd
 ```
 
-The program first opens a Part No input dialog. Enter one Part No per line,
-then click `시작`.
+Or:
 
 ```powershell
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj
 ```
 
-Create the working input file:
-
-```powershell
-Copy-Item .\input_parts.example.csv .\input_parts.csv
-```
-
-Then edit `input_parts.csv` and put the target Part No list in the `part_no`
-column.
-
-Use a custom config:
-
-```powershell
-dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config .\appsettings.json
-```
-
-Attach to an already running UNIMES instance:
+Useful modes:
 
 ```powershell
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --no-launch
+dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-only --no-launch
+dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config .\appsettings.json
 ```
 
-Only dump the current UNIMES UI tree:
+## Configuration
+
+Copy the example when local overrides are needed:
 
 ```powershell
-dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-only --no-launch
+Copy-Item .\appsettings.example.json .\appsettings.json
 ```
 
-## Output
+Passwords should stay out of git. The default config reads `UNIMES_PASSWORD` from the environment.
 
-- Run log: `logs/run_YYYYMMDD_HHMMSS.log`
-- UI dump: `logs/ui_dump_YYYYMMDD_HHMMSS.txt`
-- Screenshots: `screenshots/*.png`
-- Part lookup CSV: `output/result_YYYYMMDD_HHMMSS.csv`
+## Runtime Output
 
-Current workflow:
+These folders are generated and ignored by git:
 
-```text
-1. 품목정보관리 탭
-2. 품목명에 Part No 입력
-3. 조회
-4. 품목별 BIN 정보 관리 탭
-5. 품목 ID에 Part No 입력
-6. 조회
-```
+- `logs/`
+- `screenshots/`
+- `output/`
 
-This version is query-only. It does not click save/register/delete/apply style
-buttons.
+## Documents
 
-## Safety
-
-The automation has a safety guard for button captions containing:
-
-```text
-저장, 등록, 삭제, 확정, 승인, 적용,
-Save, Register, Delete, Confirm, Apply
-```
-
-Those buttons are blocked unless `saveEnabled` is explicitly true. The current
-PoC does not implement any save workflow.
+- [CLAUDE.md](CLAUDE.md): project rules and entry point
+- [docs/STATUS.md](docs/STATUS.md): current status and known risks
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): code map and UI references
+- [docs/CONFIG.md](docs/CONFIG.md): config keys
+- [docs/TESTING.md](docs/TESTING.md): build/run/test checklist

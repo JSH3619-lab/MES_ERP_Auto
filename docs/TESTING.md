@@ -1,25 +1,32 @@
 # 실행 / 테스트 / 로그 확인
 
-## 빌드
+## 빌드와 단위 테스트
+
 ```powershell
 dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj
+dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj
 ```
 
 ## 실행 모드
+
 ```powershell
-# 기존에 로그인된 MES에 attach (가장 흔한 테스트)
+# 일반 실행
+dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj
+
+# 이미 실행/로그인된 MES에 붙기
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --no-launch
 
-# 현재 UNIMES UI 트리만 덤프(컨트롤 automation id 확인용)
+# UI 트리만 덤프
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-only --no-launch
 
 # 특정 설정 파일 사용
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config .\appsettings.json
 ```
-실행 시 파트 입력 다이얼로그가 뜨면 한 줄에 하나씩 Part No 입력 후 시작.
-`dryRun=true`/`saveEnabled=false` 기본값이라 저장은 일어나지 않음(안전).
+
+기본값은 `dryRun=true`, `saveEnabled=false`라서 저장은 일어나지 않는다. 실제 저장 검증은 의도적으로 `appsettings.save-test.json` 또는 별도 로컬 설정을 사용한다.
 
 ## 산출물 위치
+
 | 종류 | 경로 |
 |---|---|
 | 실행 로그 | `logs/run_YYYYMMDD_HHMMSS.log` |
@@ -27,23 +34,20 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 | 스크린샷 | `screenshots/*.png` |
 | 결과 CSV | `output/result_*.csv` |
 
-## 로그에서 확인할 핵심 줄
-- 대상 창: `Main UNIMES window: name='UNIMES - UNIMES'` ← **반드시 UNIMES**(UNIERP면 실패)
-- 조회 방식: `Search button was not found by name. 좌표 기반 fallback` ← 뜨면 툴바 조회 탐색 실패(불안정 신호)
-- 미존재 팝업:
-  - 정상: `고객사PartID 팝업 감지 → 미존재 경고창 [확인]/Enter 처리 → 고객사PartID 팝업 [취소] 처리`
-  - 실패: `고객사PartID 팝업 미감지... 현재 top-level 창: [...]` ← 이 창 목록을 분석 단서로 사용
-- BIN-only 품목 코드 검색 팝업:
-  - 정상: 미존재 Part 조회 → `[971001]` 경고 실제 닫힘 → `Undefined` 검색 팝업 유지 → 같은 `품목 코드` 입력칸에 다음 Part 입력/Enter.
-  - 실패: `foreground [확인] 처리` 로그가 있는데 화면에 경고창이 남아 있으면 확인 닫힘 검증/좌표 클릭 실패.
+위 폴더는 모두 git ignore 대상이며 필요하면 삭제해도 다음 실행 때 다시 생성된다.
 
-## 시나리오별 테스트
-1. **ERP 동시 실행**: MES+ERP 둘 다 켜고 실행 → 로그가 `UNIMES`를 잡는지.
-2. **attach 포커스**: 다른 세션에서 MES 켜둔 채 실행 → 사용자가 직접 클릭 안 해도 진행되는지(STATUS #2).
-3. **미존재 파트**: 없는 파트 1건 입력 → 전체조회로 멈추지 않고 SKIPPED 처리되는지(STATUS #3).
-4. **BIN-only 품목 검색**: 없는 Part 1건 + 있는 Part 1건 → 검색 팝업을 닫지 않고 다음 Part가 같은 입력칸에서 조회되는지.
-5. **회귀**: 정상 파트 다건 → 기존처럼 행 찾고 셀 비교까지 되는지.
+## 실행 로그 확인
 
-## 주의
-- 실제 MES UI 동작은 코드/빌드만으로 검증 불가 → **반드시 실행해서 로그/스크린샷으로 확인.**
-- 추측 수정 금지: 실패하면 `run_*.log`의 해당 줄 + 스크린샷으로 원인 특정 후 고친다.
+- 대상 창은 `UNIMES - ...`여야 한다. `UNIERP`가 잡히면 안 된다.
+- 로그인 실패 화면은 실제 서버 오류 + `Try again` 링크 조합으로만 처리되어야 한다.
+- 자동 로그인 시 ID/PW가 같은 행의 좌/우 입력칸에 들어갔는지 확인한다.
+- 품목정보관리 미존재 Part는 경고 확인 후 SKIPPED로 끝나야 한다.
+- BIN 행 추가는 클릭 성공 로그가 아니라 신규 `BIN 정보 선택` 행 발견 로그가 기준이다.
+
+## 실제 MES 회귀 시나리오
+
+1. 자동 로그인: 로그인 전 화면에서 ID/PW, 언어, 시스템 값이 보존되는지 확인.
+2. 작업 범위 `품목정보관리만`: 정상 Part와 미존재 Part를 섞어 실행.
+3. 작업 범위 `BIN 정보 관리만`: 품목 코드 팝업 선택 후 기존 행/신규 행 케이스 실행.
+4. 작업 범위 `둘 다`: 품목정보관리 완료 후 BIN 정보 관리로 자연스럽게 이어지는지 확인.
+5. 저장 테스트: `dryRun=false`, `saveEnabled=true`인 로컬 설정으로만 제한 실행.

@@ -38,6 +38,7 @@
 | `inputPartsPath` | 입력 CSV 경로(입력 다이얼로그가 우선) |
 | `searchDelayMilliseconds` | 조회 후 대기(ms) |
 | `stopOnFirstFailure` | 첫 실패 시 중단 |
+| `showWorkScopeDialog` | 시작 시 작업 범위 선택 다이얼로그 표시(`품목정보관리만` / `BIN 정보 관리만` / `둘 다`) |
 | `showPartInputDialog` | 시작 시 파트 입력 다이얼로그 표시 |
 | `showCompletionDialog` | 종료 시 완료 요약 다이얼로그 표시 |
 
@@ -48,3 +49,13 @@
 | `binManage` / `turnKey` / `assemblyIn` | 셀 목표값(Y/N) |
 | `moduleDefectWarehouse` / `compDefectWarehouse` | 분류별 불량창고 목표값 |
 | `recoveryPart` | **기파트.** 미존재 Part 경고 후 열린 `고객사PartID PopUp`에서 키보드 복구에 사용할 정상 Part. 기본 `RMRDAG58A1B-GPWRRWM7` |
+
+## binInfo
+| 키 | 의미 |
+|---|---|
+| `menuName` | 대상 메뉴. 기본 `품목별 BIN 정보 관리` |
+| `moduleProcessKey` / `compProcessKey` | Module/Comp 공정 검색 키. 기본 `M050` / `C010` |
+| `binType` | 신규 BIN 행의 BIN Type. 기본 `Normal-1` |
+| `retestNo` | 신규 BIN 행의 Retest No. 기본 `0` |
+| `binComplete` | 신규 BIN 행의 Bin완료여부. 기본 `Y` |
+| `retestTh` | 신규 BIN 행의 Retest TH. 기본 `H` |
