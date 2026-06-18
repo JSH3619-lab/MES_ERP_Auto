@@ -25,6 +25,19 @@ public static class Program
             }
 
             var config = LoadConfig(options.ConfigPath, rootDirectory, logger);
+            var screenshots = new ScreenshotService(paths, logger);
+            var safety = new SafetyGuard(config.Safety, logger);
+            var app = new UnimesApp(config, paths, logger, screenshots, safety);
+
+            var loggedInUnimesAlready = false;
+            if (!options.DumpOnly)
+            {
+                loggedInUnimesAlready = app.HasExistingLoggedInMainWindow();
+                logger.Info(loggedInUnimesAlready
+                    ? "Startup check: logged-in UNIMES is already running."
+                    : "Startup check: logged-in UNIMES was not found.");
+            }
+
             if (config.Workflow.Enabled && config.Workflow.ShowWorkScopeDialog && !options.DumpOnly)
             {
                 var scope = WorkScopeDialog.ShowDialog();
@@ -51,10 +64,6 @@ public static class Program
                 config.Workflow.RuntimePartRequests = partRequests.ToList();
                 logger.Info($"Part No input received. count={config.Workflow.RuntimePartRequests.Count}");
             }
-
-            var screenshots = new ScreenshotService(paths, logger);
-            var safety = new SafetyGuard(config.Safety, logger);
-            var app = new UnimesApp(config, paths, logger, screenshots, safety);
 
             return app.RunAsync(options).GetAwaiter().GetResult();
         }

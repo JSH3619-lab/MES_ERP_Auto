@@ -18,9 +18,12 @@
 | 키 | 의미 |
 |---|---|
 | `userId` | 로그인 ID |
-| `passwordMode` | `manual`(사용자가 직접 입력 대기) / `config`(아래 password 사용) |
+| `passwordMode` | `env`(환경변수 사용) / `config`(아래 password 사용) / `manual`(사용자가 MES 로그인창에 직접 입력) |
 | `password` | `config` 모드일 때만. 정책상 평문 저장 주의 |
+| `userIdEnvironmentVariable` / `passwordEnvironmentVariable` | `env` 모드에서 읽을 환경변수 이름. 기본 `UNIMES_USER_ID` / `UNIMES_PASSWORD` |
 | `language` / `system` | 언어 / 시스템 선택 |
+
+`env` 모드는 `UNIMES_PASSWORD`가 없으면 자동 로그인을 중단한다. `UNIMES_USER_ID`가 없으면 `userId` 값을 사용한다.
 
 ## safety
 | 키 | 의미 |

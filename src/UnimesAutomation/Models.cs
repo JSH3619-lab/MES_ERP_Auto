@@ -47,8 +47,10 @@ public sealed class RootConfig
             Login = new LoginConfig
             {
                 UserId = "22402002",
-                PasswordMode = "manual",
+                PasswordMode = "env",
                 Password = "",
+                UserIdEnvironmentVariable = "UNIMES_USER_ID",
+                PasswordEnvironmentVariable = "UNIMES_PASSWORD",
                 Language = "한국어",
                 System = "UNIMES"
             },
@@ -113,6 +115,12 @@ public sealed class LoginConfig
 
     [JsonPropertyName("password")]
     public string Password { get; set; } = "";
+
+    [JsonPropertyName("userIdEnvironmentVariable")]
+    public string UserIdEnvironmentVariable { get; set; } = "UNIMES_USER_ID";
+
+    [JsonPropertyName("passwordEnvironmentVariable")]
+    public string PasswordEnvironmentVariable { get; set; } = "UNIMES_PASSWORD";
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "한국어";
