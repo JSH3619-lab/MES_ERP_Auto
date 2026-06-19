@@ -24,46 +24,19 @@ public static class Program
 
             var config = LoadConfig(options.ConfigPath, rootDirectory, logger);
             var screenshots = new ScreenshotService(paths, logger);
-            var safety = new SafetyGuard(config.Safety, logger);
-            var app = new UnimesApp(config, paths, logger, screenshots, safety);
 
-            var loggedInUnimesAlready = false;
-            if (!options.DumpOnly)
+            if (options.DumpOnly)
             {
-                loggedInUnimesAlready = app.HasExistingLoggedInMainWindow();
-                logger.Info(loggedInUnimesAlready
-                    ? "Startup check: logged-in UNIMES is already running."
-                    : "Startup check: logged-in UNIMES was not found.");
+                var safety = new SafetyGuard(config.Safety, logger);
+                var app = new UnimesApp(config, paths, logger, screenshots, safety);
+                return app.RunAsync(options).GetAwaiter().GetResult();
             }
 
-            if (config.Workflow.Enabled && config.Workflow.ShowWorkScopeDialog && !options.DumpOnly)
-            {
-                var scope = WorkScopeDialog.ShowDialog();
-                if (scope is null)
-                {
-                    logger.Info("Work scope selection cancelled by user.");
-                    return 0;
-                }
-
-                config.Workflow.RuntimeWorkScope = scope.Value;
-                logger.Info($"Work scope selected: {scope.Value}");
-            }
-
-            if (config.Workflow.Enabled && config.Workflow.ShowPartInputDialog && !options.DumpOnly)
-            {
-                logger.Info("Showing Part No input dialog before launching/attaching UNIMES.");
-                var partRequests = PartInputDialog.ShowDialog();
-                if (partRequests is null)
-                {
-                    logger.Info("Part No input was cancelled by user.");
-                    return 0;
-                }
-
-                config.Workflow.RuntimePartRequests = partRequests.ToList();
-                logger.Info($"Part No input received. count={config.Workflow.RuntimePartRequests.Count}");
-            }
-
-            return app.RunAsync(options).GetAwaiter().GetResult();
+            var appSettingsPath = Path.Combine(rootDirectory, "appsettings.json");
+            System.Windows.Forms.Application.EnableVisualStyles();
+            System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+            System.Windows.Forms.Application.Run(new MainForm(config, paths, logger, screenshots, options, appSettingsPath));
+            return 0;
         }
         catch (Exception ex)
         {
