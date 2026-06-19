@@ -3184,6 +3184,22 @@ public sealed class UnimesApp
     private (string UserId, string Password, string Source)? ResolveLoginCredentials()
     {
         var mode = (_config.Login.PasswordMode ?? "").Trim().ToLowerInvariant();
+        if (mode == "dpapi")
+        {
+            var userId = string.IsNullOrWhiteSpace(_config.Login.UserId)
+                ? GetEnvironmentValue(_config.Login.UserIdEnvironmentVariable)
+                : _config.Login.UserId;
+            var password = SecretProtector.Decrypt(_config.Login.PasswordEncrypted);
+
+            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrEmpty(password))
+            {
+                return (userId, password, "dpapi");
+            }
+
+            throw new InvalidOperationException(
+                "login.passwordMode=dpapi 이지만 복호화된 비밀번호가 비어 있습니다. 설정 창에서 비밀번호를 다시 입력하세요.");
+        }
+
         if (mode == "env")
         {
             var userId = GetEnvironmentValue(_config.Login.UserIdEnvironmentVariable);

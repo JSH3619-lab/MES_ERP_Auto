@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace UnimesAutomation;
 
 public static class Program
@@ -103,22 +101,7 @@ public static class Program
         var fullPath = Path.GetFullPath(configPath);
         logger.Info($"Loading config: {fullPath}");
 
-        var json = File.ReadAllText(fullPath);
-        var config = JsonSerializer.Deserialize<RootConfig>(
-            json,
-            new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            });
-
-        if (config is null)
-        {
-            throw new InvalidOperationException("Config file could not be parsed.");
-        }
-
-        return config;
+        return ConfigStore.Load(fullPath);
     }
 
     private static CommandLineOptions ParseArgs(string[] args)
