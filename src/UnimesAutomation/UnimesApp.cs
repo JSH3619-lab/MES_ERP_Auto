@@ -15,8 +15,7 @@ public sealed class UnimesApp
 
     private sealed record WorkflowRunResult(
         List<PartRequest> ValidParts,
-        List<PartResult> Results,
-        string OutputPath);
+        List<PartResult> Results);
 
     public UnimesApp(
         RootConfig config,
@@ -161,33 +160,29 @@ public sealed class UnimesApp
         {
             var scope = _config.Workflow.RuntimeWorkScope;
             List<PartRequest> binParts = _config.Workflow.RuntimePartRequests.ToList();
-            var combinedResults = new List<PartResult>();
-            var combinedOutputPaths = new List<string>();
+            var itemResults = new List<PartResult>();
+            var binResults = new List<BinResult>();
 
             if (scope == WorkScope.ItemInfo || scope == WorkScope.Both)
             {
-                var itemRun = await RunItemInfoWorkflowAsync(mainWindow, showCompletionDialog: scope == WorkScope.ItemInfo);
+                var itemRun = await RunItemInfoWorkflowAsync(mainWindow);
+                itemResults = itemRun.Results;
                 if (scope == WorkScope.Both)
                 {
                     binParts = itemRun.ValidParts;
-                    combinedResults.AddRange(itemRun.Results);
-                    AddOutputPath(combinedOutputPaths, itemRun.OutputPath);
                 }
             }
 
             if (scope == WorkScope.BinInfo || scope == WorkScope.Both)
             {
-                var binRun = await RunBinInfoWorkflowAsync(mainWindow, binParts, showCompletionDialog: scope == WorkScope.BinInfo);
-                if (scope == WorkScope.Both)
-                {
-                    combinedResults.AddRange(binRun.Results);
-                    AddOutputPath(combinedOutputPaths, binRun.OutputPath);
-                }
+                binResults = await RunBinInfoWorkflowAsync(mainWindow, binParts);
             }
 
-            if (scope == WorkScope.Both && combinedResults.Count > 0)
+            if (itemResults.Count > 0 || binResults.Count > 0)
             {
-                ShowCompletionDialog(combinedResults, combinedOutputPaths);
+                var outputPath = ResultWorkbook.Write(_paths.OutputDirectory, _paths.Timestamp, itemResults, binResults);
+                _logger.Info($"결과 리포트 저장: {outputPath}");
+                ShowCompletionDialog(itemResults, binResults, outputPath);
             }
         }
 
@@ -195,7 +190,7 @@ public sealed class UnimesApp
         return 0;
     }
 
-    private async Task<WorkflowRunResult> RunItemInfoWorkflowAsync(AutomationElement mainWindow, bool showCompletionDialog)
+    private async Task<WorkflowRunResult> RunItemInfoWorkflowAsync(AutomationElement mainWindow)
     {
         var inputPath = "";
         IReadOnlyList<PartRequest> requests;
@@ -213,7 +208,7 @@ public sealed class UnimesApp
         if (requests.Count == 0)
         {
             _logger.Warn($"No Part No entries found. input='{inputPath}'");
-            return new WorkflowRunResult([], [], "");
+            return new WorkflowRunResult([], []);
         }
 
         _logger.Info($"품목정보관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -451,33 +446,24 @@ public sealed class UnimesApp
             }
         }
 
-        var outputPath = CsvFiles.WriteResults(_paths.OutputDirectory, _paths.Timestamp, results);
-        _logger.Info($"품목정보관리 result CSV saved: {outputPath}");
-
-        if (showCompletionDialog)
-        {
-            ShowCompletionDialog(results, outputPath);
-        }
-
-        return new WorkflowRunResult(validParts, results, outputPath);
+        return new WorkflowRunResult(validParts, results);
     }
 
-    private async Task<WorkflowRunResult> RunBinInfoWorkflowAsync(
+    private async Task<List<BinResult>> RunBinInfoWorkflowAsync(
         AutomationElement mainWindow,
-        IReadOnlyList<PartRequest> requests,
-        bool showCompletionDialog)
+        IReadOnlyList<PartRequest> requests)
     {
         if (requests.Count == 0)
         {
             _logger.Info("BIN 정보 관리 대상 Part 없음. 건너뜀.");
-            return new WorkflowRunResult([], [], "");
+            return [];
         }
 
         _logger.Info($"품목별 BIN 정보 관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
         await NavigateToMenuByF3Async(mainWindow, _config.Global.BinInfoMenuName);
         BringToFront(mainWindow);
 
-        var results = new List<PartResult>();
+        var results = new List<BinResult>();
         var useProductLookup = _config.Workflow.RuntimeWorkScope == WorkScope.BinInfo;
         AutomationElement binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
         AutomationElement? partIdEdit = FindBinPartIdEdit(binWindow);
@@ -487,15 +473,29 @@ public sealed class UnimesApp
         foreach (var request in requests)
         {
             var resultRecorded = false;
+            var cls = PartClassifier.Classify(request.PartNo);
+            var rowProcess = "";
+            var rowBinType = "";
+            var rowRetestNo = "";
+            var rowBinComplete = "";
+            var rowRetestTh = "";
+            var rowBinId = "";
             void RecordResult(string status, string saved, string message)
             {
-                results.Add(new PartResult
+                results.Add(new BinResult
                 {
                     PartNo = request.PartNo,
-                    Classification = "BIN",
+                    Classification = cls.ToString(),
+                    ProcessName = rowProcess,
+                    BinType = rowBinType,
+                    RetestNo = rowRetestNo,
+                    BinComplete = rowBinComplete,
+                    RetestTh = rowRetestTh,
+                    BinId = rowBinId,
                     Saved = saved,
                     Status = status,
-                    Message = message
+                    Message = message,
+                    ProcessedAt = DateTime.Now
                 });
                 resultRecorded = true;
             }
@@ -512,6 +512,9 @@ public sealed class UnimesApp
                     RecordResult("SKIPPED", "NO", "BIN 분류/용량 파싱 실패");
                     continue;
                 }
+
+                rowProcess = target.ProcessSearchKey;
+                rowBinId = target.BinIdName;
 
                 if (!IsElementUsable(binWindow))
                 {
@@ -622,6 +625,10 @@ public sealed class UnimesApp
                 // 실행은 분류별 첫 행만 적용한다. 모델/설정은 다중 행을 담을 수 있으나,
                 // 다중 행 실행은 라이브 검증이 가능한 Flash 도입 시점에 추가한다(스펙 §4).
                 var binRow = (_config.ResolveCategory(target.Class)?.BinInfo.Rows.FirstOrDefault()) ?? new BinRowConfig();
+                rowBinType = binRow.BinType;
+                rowRetestNo = binRow.RetestNo;
+                rowBinComplete = binRow.BinComplete;
+                rowRetestTh = binRow.RetestTh;
                 FillFixedBinCells(row, binRow);
 
                 if (!await SelectBinIdPopupExactAsync(row, target.BinIdName))
@@ -667,18 +674,8 @@ public sealed class UnimesApp
             }
         }
 
-        var outputPath = "";
-        if (results.Count > 0)
-        {
-            outputPath = CsvFiles.WriteResults(_paths.OutputDirectory, $"{_paths.Timestamp}_bin", results);
-            if (showCompletionDialog)
-            {
-                ShowCompletionDialog(results, outputPath);
-            }
-        }
-
         _logger.Info("품목별 BIN 정보 관리 workflow finished.");
-        return new WorkflowRunResult([], results, outputPath);
+        return results;
     }
 
     private AutomationElement? FindBinPartIdEdit(AutomationElement binWindow)
@@ -1751,31 +1748,35 @@ public sealed class UnimesApp
         }
     }
 
-    private void ShowCompletionDialog(IReadOnlyList<PartResult> results, string outputPath)
-    {
-        ShowCompletionDialog(results, [outputPath]);
-    }
+    private readonly record struct ResultLine(string PartNo, string Saved, string Status, string Message);
 
-    private void ShowCompletionDialog(IReadOnlyList<PartResult> results, IReadOnlyList<string> outputPaths)
+    private void ShowCompletionDialog(
+        IReadOnlyList<PartResult> itemResults,
+        IReadOnlyList<BinResult> binResults,
+        string outputPath)
     {
         if (!_config.Workflow.ShowCompletionDialog)
         {
             return;
         }
 
-        var saved = results.Count(r => string.Equals(r.Saved, "YES", StringComparison.Ordinal));
-        var unchanged = results.Count(r => string.Equals(r.Saved, "UNCHANGED", StringComparison.Ordinal));
-        var dryRun = results.Count(r => string.Equals(r.Status, "DRYRUN", StringComparison.Ordinal));
-        var skipped = results.Count(r => string.Equals(r.Status, "SKIPPED", StringComparison.Ordinal));
-        var errors = results.Count(r => string.Equals(r.Status, "ERROR", StringComparison.Ordinal));
+        var lines = new List<ResultLine>();
+        foreach (var r in itemResults) lines.Add(new ResultLine(r.PartNo, r.Saved, r.Status, r.Message));
+        foreach (var r in binResults) lines.Add(new ResultLine(r.PartNo, r.Saved, r.Status, r.Message));
+
+        var saved = lines.Count(r => string.Equals(r.Saved, "YES", StringComparison.Ordinal));
+        var unchanged = lines.Count(r => string.Equals(r.Saved, "UNCHANGED", StringComparison.Ordinal));
+        var dryRun = lines.Count(r => string.Equals(r.Status, "DRYRUN", StringComparison.Ordinal));
+        var skipped = lines.Count(r => string.Equals(r.Status, "SKIPPED", StringComparison.Ordinal));
+        var errors = lines.Count(r => string.Equals(r.Status, "ERROR", StringComparison.Ordinal));
 
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine($"작업 완료 (총 {results.Count}건)");
+        builder.AppendLine($"작업 완료 (총 {lines.Count}건)");
         builder.AppendLine();
         builder.AppendLine($"저장: {saved}    변경없음: {unchanged}    변경예정(dryRun): {dryRun}");
         builder.AppendLine($"건너뜀: {skipped}    오류: {errors}");
 
-        var problems = results.Where(r => r.Status is "ERROR" or "SKIPPED").ToList();
+        var problems = lines.Where(r => r.Status is "ERROR" or "SKIPPED").ToList();
         if (problems.Count > 0)
         {
             builder.AppendLine();
@@ -1787,18 +1788,7 @@ public sealed class UnimesApp
         }
 
         builder.AppendLine();
-        if (outputPaths.Count == 1)
-        {
-            builder.AppendLine($"결과 CSV: {outputPaths[0]}");
-        }
-        else if (outputPaths.Count > 1)
-        {
-            builder.AppendLine("결과 CSV:");
-            foreach (var outputPath in outputPaths)
-            {
-                builder.AppendLine($" - {outputPath}");
-            }
-        }
+        builder.AppendLine($"결과 파일: {outputPath}");
 
         var icon = errors > 0 || skipped > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information;
         var title = errors > 0 || skipped > 0 ? "UNIMES 자동화 완료 - 확인 필요" : "UNIMES 자동화 완료";
@@ -1809,14 +1799,6 @@ public sealed class UnimesApp
         catch (Exception ex)
         {
             _logger.Warn($"Completion dialog failed: {ex.Message}");
-        }
-    }
-
-    private static void AddOutputPath(List<string> outputPaths, string outputPath)
-    {
-        if (!string.IsNullOrWhiteSpace(outputPath))
-        {
-            outputPaths.Add(outputPath);
         }
     }
 

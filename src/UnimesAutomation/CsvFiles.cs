@@ -48,34 +48,6 @@ public static class CsvFiles
         return requests;
     }
 
-    public static string WriteResults(string outputDirectory, string timestamp, IReadOnlyList<PartResult> results)
-    {
-        Directory.CreateDirectory(outputDirectory);
-        var path = Path.Combine(outputDirectory, $"result_{timestamp}.csv");
-
-        var builder = new StringBuilder();
-        builder.AppendLine("part_no,classification,bin_manage,turn_key,assembly_in,defect_warehouse,saved,status,message");
-
-        foreach (var result in results)
-        {
-            builder.AppendLine(string.Join(",", new[]
-            {
-                Escape(result.PartNo),
-                Escape(result.Classification),
-                Escape(result.BinManage),
-                Escape(result.TurnKey),
-                Escape(result.AssemblyIn),
-                Escape(result.DefectWarehouse),
-                Escape(result.Saved),
-                Escape(result.Status),
-                Escape(result.Message)
-            }));
-        }
-
-        File.WriteAllText(path, builder.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        return path;
-    }
-
     private static int FindColumn(IReadOnlyList<string> header, params string[] names)
     {
         for (var index = 0; index < header.Count; index++)
@@ -103,16 +75,6 @@ public static class CsvFiles
     private static string Normalize(string value)
     {
         return value.Trim().Replace(" ", "").Replace("_", "").ToLowerInvariant();
-    }
-
-    private static string Escape(string value)
-    {
-        if (value.Contains('"') || value.Contains(',') || value.Contains('\r') || value.Contains('\n'))
-        {
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
-        }
-
-        return value;
     }
 
     private static List<string> ParseCsvLine(string line)
