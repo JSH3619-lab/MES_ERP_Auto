@@ -7,6 +7,8 @@ public sealed class SimpleLogger : IDisposable
     private readonly object _lock = new();
     private readonly StreamWriter _writer;
 
+    public event Action<string>? LineWritten;
+
     public SimpleLogger(string logPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
@@ -36,6 +38,8 @@ public sealed class SimpleLogger : IDisposable
             Console.WriteLine(line);
             _writer.WriteLine(line);
         }
+
+        LineWritten?.Invoke(line);
     }
 
     public void Dispose()
