@@ -619,6 +619,8 @@ public sealed class UnimesApp
                     continue;
                 }
 
+                // 실행은 분류별 첫 행만 적용한다. 모델/설정은 다중 행을 담을 수 있으나,
+                // 다중 행 실행은 라이브 검증이 가능한 Flash 도입 시점에 추가한다(스펙 §4).
                 var binRow = (_config.ResolveCategory(target.Class)?.BinInfo.Rows.FirstOrDefault()) ?? new BinRowConfig();
                 FillFixedBinCells(row, binRow);
 

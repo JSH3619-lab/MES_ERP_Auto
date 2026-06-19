@@ -25,7 +25,7 @@
 수정:
 - `src/UnimesAutomation/Models.cs` — 설정 모델 분류별 재구성, `dpapi` 비밀번호 필드.
 - `src/UnimesAutomation/BinIdResolver.cs` — `Resolve` 시그니처를 분류별 공정키로 변경.
-- `src/UnimesAutomation/UnimesApp.cs` — 분류별 설정 선택, BIN 행 순회, `dpapi` 로그인.
+- `src/UnimesAutomation/UnimesApp.cs` — 분류별 설정 선택, BIN 값 분류별 적용(첫 행), `dpapi` 로그인.
 - `src/UnimesAutomation/Program.cs` — `ConfigStore.Load` 사용.
 - `src/UnimesAutomation/UnimesAutomation.csproj` — ProtectedData 패키지.
 - `tests/UnimesAutomation.Tests/BinIdResolverTests.cs` — 새 시그니처에 맞춤.
@@ -443,51 +443,43 @@ git commit -m "refactor: restructure config into DRAM Module/Comp categories"
 
 ---
 
-## Task 4: BIN 행 순회(다중 행 동작) — UnimesApp
+## Task 4: BIN 다중 행 — 실행 루프는 Flash로 보류 (결정 B)
 
-행 추가가 실제 동작하도록, BIN 추가+채우기 블록을 분류의 `Rows` 순회로 감싼다. DRAM은 `Rows`가 1개라
-동작이 동일(저위험).
+행 추가/삭제는 설정 모델·UI(Plan 3)에서 다중 행을 **저장**할 수 있게 둔다. 하지만 자동화 **실행**은
+현재 분류별 **첫 행**(`Rows.FirstOrDefault()`)만 적용한다 — Task 3에서 이미 그렇게 배선됨.
+
+**근거:** BIN 삽입 루프(`UnimesApp.cs` ~503-650)는 라이브 검증까지 끝난 가장 fragile한 코드이고,
+중간 실패 시 `continue`로 그 파트를 건너뛰는 제어흐름을 쓴다. 이를 `foreach (row in rows)`로 감싸면
+`continue` 의미가 안쪽 행 루프로 바뀌어 **DRAM 1행 경로까지 회귀**한다(실패해도 저장으로 진행). 제대로
+하려면 per-row 시퀀스를 성공/실패 헬퍼로 추출해 제어흐름을 다시 짜야 하는데, 이 다중 행 경로는
+DRAM(1행)으로는 실행되지 않아 **지금 라이브 검증이 불가능**하다. 검증 불가능한 복잡성을 fragile
+코드에 넣지 않는다(프로젝트 원칙).
 
 **Files:**
-- Modify: `src/UnimesAutomation/UnimesApp.cs`
+- Modify: `src/UnimesAutomation/UnimesApp.cs` (의도 주석만)
 
-- [ ] **Step 1: 대상 영역 읽기**
+- [ ] **Step 1: 실행 지점에 의도 주석 추가**
 
-`UnimesApp.cs`의 BIN 처리 루프(대략 1180~1445행: 행 존재 확인 → 행 추가 → 셀 채우기 구간)를 읽어
-"한 파트에 대해 행 1개를 추가/채우는 블록"의 시작/끝을 식별한다.
-
-- [ ] **Step 2: 행 순회로 감싸기**
-
-식별한 블록을 다음 패턴으로 감싼다(값 참조는 Task 3 Step 5에서 만든 `binRow` 대신 순회 변수 `row` 사용):
+`FillFixedBinCells` 호출부(약 622행) 위에:
 
 ```csharp
-        var binCategory = _config.ResolveCategory(target.Class);
-        var rows = (binCategory?.BinInfo.Rows is { Count: > 0 } r) ? r : [new BinRowConfig()];
-
-        foreach (var row in rows)
-        {
-            // (기존: 행 1개 추가 + 셀 채우기 블록)
-            // 셀 값은 row.BinType / row.RetestNo / row.BinComplete / row.RetestTh 사용.
-            // 공정명/공정키가 행별로 다르면 row.ProcessName 사용.
-        }
+                // 실행은 분류별 첫 행만 적용한다. 모델/설정은 다중 행을 담을 수 있으나,
+                // 다중 행 실행은 라이브 검증이 가능한 Flash 도입 시점에 추가한다(스펙 §4).
+                var binRow = (_config.ResolveCategory(target.Class)?.BinInfo.Rows.FirstOrDefault()) ?? new BinRowConfig();
+                FillFixedBinCells(row, binRow);
 ```
 
-DRAM 기본은 `Rows.Count == 1`이라 단일 반복 = 현재 동작과 동일.
+- [ ] **Step 2: 빌드 확인 + 커밋**
 
-- [ ] **Step 3: 빌드 확인**
-
-Run: `dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj`
-Expected: 성공.
-
-- [ ] **Step 4: Commit**
+Run: `dotnet build ./src/UnimesAutomation/UnimesAutomation.csproj` → 성공.
 
 ```bash
-git add src/UnimesAutomation/UnimesApp.cs
-git commit -m "feat: iterate configured BIN rows per category (single row for DRAM)"
+git add src/UnimesAutomation/UnimesApp.cs docs/superpowers/specs/2026-06-19-mes-main-settings-design.md docs/superpowers/plans/2026-06-19-mes-config-foundation.md
+git commit -m "docs: defer multi-row BIN execution to Flash milestone (decision B)"
 ```
 
-> **주의:** 이 변경의 실제 다중 행 동작은 라이브 검증이 필요(빌드/단위테스트로 불충분).
-> DRAM 1행은 회귀 위험이 낮으나, 2행 이상 시나리오는 Flash 도입 시 라이브로 확인한다(스펙 §4).
+> **향후(Flash 도입 시):** per-row 시퀀스를 헬퍼로 추출 → 행 루프 구성 → 실 MES 다중 행 설정으로
+> 라이브 검증. 그때까지 실행은 첫 행만 적용.
 
 ---
 
@@ -882,7 +874,7 @@ git commit -m "docs: update example config to category-based shape"
 
 ## Self-Review (작성자 체크 — 완료)
 
-- **스펙 커버리지**: §4 모델 재구성(Task 3) / §5 영속화·DPAPI·마이그레이션(Task 2,5,6) / §9 분류별 배선·행 순회(Task 3,4). 엑셀 리포트(§8)·GUI(§6,7)·테마(§14)·save-test 제거(§10)는 Plan 2/3.
+- **스펙 커버리지**: §4 모델 재구성(Task 3) / §5 영속화·DPAPI·마이그레이션(Task 2,5,6) / §9 분류별 배선(Task 3), 다중 행 실행은 Flash 보류(Task 4, 결정 B). 엑셀 리포트(§8)·GUI(§6,7)·테마(§14)·save-test 제거(§10)는 Plan 2/3.
 - **플레이스홀더**: 신규 단위는 전체 코드 포함. `UnimesApp` 치환은 앵커 문자열+규칙으로 명시(거대 파일이라 줄 단위 붙여넣기 대신 정확한 old→new 제시).
 - **타입 일관성**: `ItemInfoValues`/`BinInfoValues`/`BinRowConfig`/`CategoryConfig`/`OptionsConfig`/`GlobalConfig`/`ResolveCategory`/`SecretProtector`/`ConfigStore` 명칭이 태스크 전반에서 동일.
 
