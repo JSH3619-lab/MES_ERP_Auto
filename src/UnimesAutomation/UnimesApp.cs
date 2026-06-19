@@ -243,13 +243,6 @@ public sealed class UnimesApp
         foreach (var request in requests)
         {
             var classification = PartClassifier.Classify(request.PartNo);
-            var defectWarehouse = classification switch
-            {
-                PartClass.Module => _config.Categories.DramModule.ItemInfo.DefectWarehouse,
-                PartClass.Comp => _config.Categories.DramComp.ItemInfo.DefectWarehouse,
-                _ => ""
-            };
-
             var categoryItem = (_config.ResolveCategory(classification)?.ItemInfo) ?? new ItemInfoValues();
 
             var result = new PartResult
@@ -259,7 +252,7 @@ public sealed class UnimesApp
                 BinManage = categoryItem.BinManage,
                 TurnKey = categoryItem.TurnKey,
                 AssemblyIn = categoryItem.AssemblyIn,
-                DefectWarehouse = defectWarehouse,
+                DefectWarehouse = categoryItem.DefectWarehouse,
                 Saved = "NO"
             };
 
