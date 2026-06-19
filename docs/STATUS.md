@@ -46,6 +46,7 @@
 
 - UI Automation 기반이라 화면에 보이는 것과 UIA 트리가 다를 수 있다.
 - 실패 분석은 최신 `logs/run_*.log`, 대응 스크린샷, `ui_dump_*.txt` 순서로 한다.
+- 결과는 `output/result_<timestamp>.xlsx` 한 파일로 저장된다 — 시트 2개(`품목정보관리`/`BIN 정보관리`), MES 폼과 같은 한글 컬럼 + 행별 처리일시.
 - `logs/`, `screenshots/`, `output/`, `bin/`, `obj/`는 생성물이며 git 추적 대상이 아니다.
 - `appsettings.save-test.json`은 실제 저장 테스트용 로컬 파일이며 git 추적 대상이 아니다.
 
