@@ -18,7 +18,7 @@ public static class BinIdResolver
         ["AH"] = (16, true), ["HE"] = (24, true), ["BH"] = (32, true)
     };
 
-    public static BinInfoTarget? Resolve(string partNo, BinInfoConfig config)
+    public static BinInfoTarget? Resolve(string partNo, string moduleProcessKey, string compProcessKey)
     {
         var code = (partNo ?? "").Trim();
         var cls = PartClassifier.Classify(code);
@@ -31,7 +31,7 @@ public static class BinIdResolver
                 return null;
             }
 
-            return new BinInfoTarget(cls, config.ModuleProcessKey, $"RAM_Module_Normal_{gb}GB");
+            return new BinInfoTarget(cls, moduleProcessKey, $"RAM_Module_Normal_{gb}GB");
         }
 
         if (cls == PartClass.Comp)
@@ -45,7 +45,7 @@ public static class BinIdResolver
             var name = info.Ddr5
                 ? $"DRAM_Comp_D5_XMP72_Bin_{info.Gb}Gb"
                 : $"DRAM_Comp_Bin_{info.Gb}Gb";
-            return new BinInfoTarget(cls, config.CompProcessKey, name);
+            return new BinInfoTarget(cls, compProcessKey, name);
         }
 
         return null;

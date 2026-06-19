@@ -224,14 +224,14 @@ public sealed class UnimesApp
             var cls = PartClassifier.Classify(partNo);
             var warehouse = cls switch
             {
-                PartClass.Module => _config.ItemInfo.ModuleDefectWarehouse,
-                PartClass.Comp => _config.ItemInfo.CompDefectWarehouse,
+                PartClass.Module => _config.Categories.DramModule.ItemInfo.DefectWarehouse,
+                PartClass.Comp => _config.Categories.DramComp.ItemInfo.DefectWarehouse,
                 _ => "(분류 실패 → 미존재 여부만 확인)"
             };
             _logger.Info($"  [{index + 1}/{requests.Count}] {partNo} → class={cls}, 불량창고={warehouse}");
         }
 
-        await NavigateToMenuByF3Async(mainWindow, _config.ItemInfo.MenuName);
+        await NavigateToMenuByF3Async(mainWindow, _config.Global.ItemInfoMenuName);
 
         var results = new List<PartResult>();
         var validParts = new List<PartRequest>();
@@ -245,18 +245,20 @@ public sealed class UnimesApp
             var classification = PartClassifier.Classify(request.PartNo);
             var defectWarehouse = classification switch
             {
-                PartClass.Module => _config.ItemInfo.ModuleDefectWarehouse,
-                PartClass.Comp => _config.ItemInfo.CompDefectWarehouse,
+                PartClass.Module => _config.Categories.DramModule.ItemInfo.DefectWarehouse,
+                PartClass.Comp => _config.Categories.DramComp.ItemInfo.DefectWarehouse,
                 _ => ""
             };
+
+            var categoryItem = (_config.ResolveCategory(classification)?.ItemInfo) ?? new ItemInfoValues();
 
             var result = new PartResult
             {
                 PartNo = request.PartNo,
                 Classification = classification.ToString(),
-                BinManage = _config.ItemInfo.BinManage,
-                TurnKey = _config.ItemInfo.TurnKey,
-                AssemblyIn = _config.ItemInfo.AssemblyIn,
+                BinManage = categoryItem.BinManage,
+                TurnKey = categoryItem.TurnKey,
+                AssemblyIn = categoryItem.AssemblyIn,
                 DefectWarehouse = defectWarehouse,
                 Saved = "NO"
             };
@@ -479,12 +481,12 @@ public sealed class UnimesApp
         }
 
         _logger.Info($"품목별 BIN 정보 관리 workflow started. count={requests.Count}, dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
-        await NavigateToMenuByF3Async(mainWindow, _config.BinInfo.MenuName);
+        await NavigateToMenuByF3Async(mainWindow, _config.Global.BinInfoMenuName);
         BringToFront(mainWindow);
 
         var results = new List<PartResult>();
         var useProductLookup = _config.Workflow.RuntimeWorkScope == WorkScope.BinInfo;
-        AutomationElement binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+        AutomationElement binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
         AutomationElement? partIdEdit = FindBinPartIdEdit(binWindow);
         AutomationElement? searchButton = FindSearchButton(mainWindow);
         _logger.Info($"BIN stable controls cached. partIdEdit={partIdEdit is not null}, searchButton={searchButton is not null}, productLookup={useProductLookup}");
@@ -510,7 +512,7 @@ public sealed class UnimesApp
                 _logger.Info($"BIN part started. part='{request.PartNo}'");
                 BringToFront(mainWindow);
 
-                var target = BinIdResolver.Resolve(request.PartNo, _config.BinInfo);
+                var target = BinIdResolver.Resolve(request.PartNo, _config.Categories.DramModule.BinInfo.ProcessSearchKey, _config.Categories.DramComp.BinInfo.ProcessSearchKey);
                 if (target is null)
                 {
                     _logger.Warn($"BIN 분류/용량 파싱 실패로 건너뜀. part='{request.PartNo}'");
@@ -520,7 +522,7 @@ public sealed class UnimesApp
 
                 if (!IsElementUsable(binWindow))
                 {
-                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                    binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                 }
 
                 if (!IsElementUsable(partIdEdit))
@@ -580,7 +582,7 @@ public sealed class UnimesApp
 
                 if (!IsElementUsable(binWindow))
                 {
-                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                    binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                 }
 
                 var existingRows = FindBinRowsForPart(binWindow, request.PartNo).Count;
@@ -593,7 +595,7 @@ public sealed class UnimesApp
 
                 if (!IsElementUsable(binWindow))
                 {
-                    binWindow = FindNamedWindow(mainWindow, _config.BinInfo.MenuName) ?? mainWindow;
+                    binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                 }
 
                 var row = await InsertBinRowAsync(mainWindow, binWindow);
@@ -624,7 +626,8 @@ public sealed class UnimesApp
                     continue;
                 }
 
-                FillFixedBinCells(row);
+                var binRow = (_config.ResolveCategory(target.Class)?.BinInfo.Rows.FirstOrDefault()) ?? new BinRowConfig();
+                FillFixedBinCells(row, binRow);
 
                 if (!await SelectBinIdPopupExactAsync(row, target.BinIdName))
                 {
@@ -1428,17 +1431,17 @@ public sealed class UnimesApp
         _logger.Info($"BIN {columnName} 셀 팝업 버튼 클릭.");
     }
 
-    private void FillFixedBinCells(AutomationElement row)
+    private void FillFixedBinCells(AutomationElement row, BinRowConfig binRow)
     {
-        SetBinComboCell(row, "BIN Type", _config.BinInfo.BinType, expectedStoredValue: "0");
+        SetBinComboCell(row, "BIN Type", binRow.BinType, expectedStoredValue: "0");
 
         var retestNo = FindGridCell(row, "Retest No", ControlType.Edit)
             ?? throw new InvalidOperationException("BIN Retest No 셀을 찾지 못했습니다.");
-        SetElementText(retestNo, _config.BinInfo.RetestNo, "BIN Retest No");
+        SetElementText(retestNo, binRow.RetestNo, "BIN Retest No");
         CommitField();
 
-        SetBinComboCell(row, "Bin완료여부", _config.BinInfo.BinComplete);
-        SetBinComboCell(row, "Retest TH", _config.BinInfo.RetestTh);
+        SetBinComboCell(row, "Bin완료여부", binRow.BinComplete);
+        SetBinComboCell(row, "Retest TH", binRow.RetestTh);
     }
 
     private void SetBinComboCell(AutomationElement row, string columnName, string targetValue, string? expectedStoredValue = null)
@@ -2146,7 +2149,7 @@ public sealed class UnimesApp
     }
 
     private AutomationElement? FindItemInfoWindow(AutomationElement mainWindow)
-        => FindNamedWindow(mainWindow, _config.ItemInfo.MenuName);
+        => FindNamedWindow(mainWindow, _config.Global.ItemInfoMenuName);
 
     private CellAction ApplyComboCell(AutomationElement row, string columnName, string targetValue, bool readOnlyMode)
     {
@@ -2678,7 +2681,7 @@ public sealed class UnimesApp
 
     private async Task RecoverPartIdPopupByKeyboardAsync(string originalPart)
     {
-        var recoveryPart = _config.ItemInfo.RecoveryPart;
+        var recoveryPart = _config.Global.RecoveryPart;
         if (string.IsNullOrWhiteSpace(recoveryPart))
         {
             _logger.Warn("itemInfo.recoveryPart가 비어 있어 기파트 키보드 복구를 생략하고 팝업을 취소합니다.");

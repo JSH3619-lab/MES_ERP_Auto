@@ -23,11 +23,21 @@ public sealed class RootConfig
     [JsonPropertyName("workflow")]
     public WorkflowConfig Workflow { get; set; } = new();
 
-    [JsonPropertyName("itemInfo")]
-    public ItemInfoConfig ItemInfo { get; set; } = new();
+    [JsonPropertyName("options")]
+    public OptionsConfig Options { get; set; } = new();
 
-    [JsonPropertyName("binInfo")]
-    public BinInfoConfig BinInfo { get; set; } = new();
+    [JsonPropertyName("categories")]
+    public CategoriesConfig Categories { get; set; } = new();
+
+    [JsonPropertyName("global")]
+    public GlobalConfig Global { get; set; } = new();
+
+    public CategoryConfig? ResolveCategory(PartClass cls) => cls switch
+    {
+        PartClass.Module => Categories.DramModule,
+        PartClass.Comp => Categories.DramComp,
+        _ => null
+    };
 
     public static RootConfig CreateDefault()
     {
@@ -66,8 +76,9 @@ public sealed class RootConfig
                 SearchDelayMilliseconds = 1200,
                 StopOnFirstFailure = false
             },
-            ItemInfo = new ItemInfoConfig(),
-            BinInfo = new BinInfoConfig()
+            Options = new OptionsConfig(),
+            Categories = new CategoriesConfig(),
+            Global = new GlobalConfig()
         };
     }
 }
@@ -115,6 +126,13 @@ public sealed class LoginConfig
 
     [JsonPropertyName("password")]
     public string Password { get; set; } = "";
+
+    [JsonPropertyName("passwordEncrypted")]
+    public string PasswordEncrypted { get; set; } = "";
+
+    [JsonIgnore]
+    public bool UseDpapiPassword =>
+        string.Equals(PasswordMode, "dpapi", StringComparison.OrdinalIgnoreCase);
 
     [JsonPropertyName("userIdEnvironmentVariable")]
     public string UserIdEnvironmentVariable { get; set; } = "UNIMES_USER_ID";
@@ -171,11 +189,53 @@ public sealed class WorkflowConfig
     public List<PartRequest> RuntimePartRequests { get; set; } = [];
 }
 
-public sealed class ItemInfoConfig
+public sealed class OptionsConfig
 {
-    [JsonPropertyName("menuName")]
-    public string MenuName { get; set; } = "품목정보관리";
+    [JsonPropertyName("defectWarehouses")]
+    public List<string> DefectWarehouses { get; set; } = ["제품 폐기창고", "COMPONENT 폐기창고"];
 
+    [JsonPropertyName("binTypes")]
+    public List<string> BinTypes { get; set; } = ["Normal-1"];
+
+    [JsonPropertyName("retestThs")]
+    public List<string> RetestThs { get; set; } = ["H", "L"];
+
+    [JsonPropertyName("binCompletes")]
+    public List<string> BinCompletes { get; set; } = ["Y", "N"];
+}
+
+public sealed class CategoriesConfig
+{
+    [JsonPropertyName("dramModule")]
+    public CategoryConfig DramModule { get; set; } = CategoryConfig.DefaultModule();
+
+    [JsonPropertyName("dramComp")]
+    public CategoryConfig DramComp { get; set; } = CategoryConfig.DefaultComp();
+}
+
+public sealed class CategoryConfig
+{
+    [JsonPropertyName("itemInfo")]
+    public ItemInfoValues ItemInfo { get; set; } = new();
+
+    [JsonPropertyName("binInfo")]
+    public BinInfoValues BinInfo { get; set; } = new();
+
+    public static CategoryConfig DefaultModule() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "제품 폐기창고" },
+        BinInfo = new BinInfoValues { ProcessSearchKey = "M050", Rows = [BinRowConfig.Default("M050")] }
+    };
+
+    public static CategoryConfig DefaultComp() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "COMPONENT 폐기창고" },
+        BinInfo = new BinInfoValues { ProcessSearchKey = "C010", Rows = [BinRowConfig.Default("C010")] }
+    };
+}
+
+public sealed class ItemInfoValues
+{
     [JsonPropertyName("binManage")]
     public string BinManage { get; set; } = "Y";
 
@@ -185,27 +245,23 @@ public sealed class ItemInfoConfig
     [JsonPropertyName("assemblyIn")]
     public string AssemblyIn { get; set; } = "Y";
 
-    [JsonPropertyName("moduleDefectWarehouse")]
-    public string ModuleDefectWarehouse { get; set; } = "제품 폐기창고";
-
-    [JsonPropertyName("compDefectWarehouse")]
-    public string CompDefectWarehouse { get; set; } = "COMPONENT 폐기창고";
-
-    // 미존재 Part 경고 후 열린 고객사PartID 팝업에서 키보드 복구에 사용할 기등록 Part.
-    [JsonPropertyName("recoveryPart")]
-    public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
+    [JsonPropertyName("defectWarehouse")]
+    public string DefectWarehouse { get; set; } = "";
 }
 
-public sealed class BinInfoConfig
+public sealed class BinInfoValues
 {
-    [JsonPropertyName("menuName")]
-    public string MenuName { get; set; } = "품목별 BIN 정보 관리";
+    [JsonPropertyName("processSearchKey")]
+    public string ProcessSearchKey { get; set; } = "";
 
-    [JsonPropertyName("moduleProcessKey")]
-    public string ModuleProcessKey { get; set; } = "M050";
+    [JsonPropertyName("rows")]
+    public List<BinRowConfig> Rows { get; set; } = [];
+}
 
-    [JsonPropertyName("compProcessKey")]
-    public string CompProcessKey { get; set; } = "C010";
+public sealed class BinRowConfig
+{
+    [JsonPropertyName("processName")]
+    public string ProcessName { get; set; } = "";
 
     [JsonPropertyName("binType")]
     public string BinType { get; set; } = "Normal-1";
@@ -218,6 +274,20 @@ public sealed class BinInfoConfig
 
     [JsonPropertyName("retestTh")]
     public string RetestTh { get; set; } = "H";
+
+    public static BinRowConfig Default(string processName) => new() { ProcessName = processName };
+}
+
+public sealed class GlobalConfig
+{
+    [JsonPropertyName("recoveryPart")]
+    public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
+
+    [JsonPropertyName("itemInfoMenuName")]
+    public string ItemInfoMenuName { get; set; } = "품목정보관리";
+
+    [JsonPropertyName("binInfoMenuName")]
+    public string BinInfoMenuName { get; set; } = "품목별 BIN 정보 관리";
 }
 
 public sealed class PartRequest
