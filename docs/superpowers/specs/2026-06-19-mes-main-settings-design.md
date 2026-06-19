@@ -88,8 +88,13 @@
 - 기존 `ItemInfoConfig`/`BinInfoConfig`(플랫)는 제거. `WorkScope` enum, `PartRequest`, `PartResult` 유지.
 
 규칙:
-- DRAM은 두 분류 모두 `rows` 1개 고정. `행 추가/삭제`는 UI·모델에 만들어두되 미사용(향후 Flash 대비).
-- **BIN ID는 모델에 저장하지 않음** — 기존 `BinIdResolver` 자동 산출 유지(Flash 추가 시 재논의).
+- `행 추가/삭제`는 **실제 동작**(죽은 버튼 아님). `UnimesApp`이 `binInfo.rows`를 순회하므로
+  설정에서 행을 N개로 만들면 그 분류 파트마다 BIN 행을 N개 추가·입력한다.
+  DRAM은 **기본값이 1행**일 뿐 메커니즘은 1개든 N개든 동일하게 동작.
+- **BIN ID 한계**: BIN ID는 파트 용량코드로 **파트당 1개 값**만 자동 산출되므로, 여러 행을 추가하면
+  모든 행이 **같은 BIN ID**를 받는다. 행마다 다른 BIN ID(예: 예전 Module 4행)는 BIN ID 산출 규칙
+  변경이 필요하며 이는 **Flash 추가 시점**으로 미룬다.
+- **BIN ID는 모델에 저장하지 않음** — 기존 `BinIdResolver` 자동 산출 유지.
 
 ## 5. 설정 영속화 + 보안 (`ConfigStore.cs`, `SecretProtector.cs`)
 
@@ -182,3 +187,24 @@
 - 안전 가드: 안전 모드 ON에서 저장 버튼 차단, 토글 ON 시 확인 다이얼로그 동작 확인.
 - 리포트: 통합 실행 후 `result_<timestamp>.xlsx`에 두 시트·한글 컬럼·처리일시 생성 확인.
 - 실 MES 동작 변경은 빌드/테스트만으로 불충분 → live 실행 로그로 확인(프로젝트 원칙).
+
+## 14. UI 테마 / 스타일 (다크 HUD)
+
+전체 화면(메인·설정)을 **JARVIS/HUD 풍 다크 테마**로 통일한다. 레이아웃은 §4~§8 그대로,
+스킨만 적용.
+
+- **팔레트**: 배경 딥네이비-블랙(`#0A0E17`), 패널 `#0C121F`/`#060A11`, 보더 `#163B47`,
+  주 액센트 시안 네온(`#2BD4D8`), 경고/안전모드 골드(`#F5B642`), 위험 레드(`#FF6B6B`),
+  본문 텍스트 시안틴트 라이트(`#BFEFF3`/`#7FB9C2`), 흐린 텍스트 `#4E6B78`.
+- **타이포**: 전반적으로 모노스페이스(`Cascadia Code`/`Consolas`/`D2Coding` 폴백). 라벨은 약간의
+  letter-spacing. 로그 패널은 터미널형(검정 배경 + 시안 INFO / 골드 WARN / 레드 ERROR + 흐린 타임스탬프).
+- **장식 요소**: 창 모서리 L자 코너 브래킷, 상단 `● LINK: MES` 상태 인디케이터, 진행률 바는 시안.
+- **WinForms 구현 메모**: 기본 컨트롤은 라이트라서 커스텀 다크가 필요.
+  - 폼/패널 `BackColor` 다크, `ForeColor` 라이트, `FlatStyle = Flat`, 버튼 `FlatAppearance` 보더 시안.
+  - 타이틀바 커스텀이 필요하면 `FormBorderStyle = None` + 직접 그린 상단바(드래그 이동/닫기) — 단,
+    구현 비용이 있으니 1차 구현은 표준 보더 유지 + 본문만 다크로 하고, 커스텀 타이틀바는 선택 단계로 둔다.
+  - 코너 브래킷·로그 색상은 `Paint`/owner-draw 또는 라벨 색 지정으로 처리.
+  - DataGridView(설정 테이블)는 `EnableHeadersVisualStyles=false` + 셀/헤더 다크 스타일,
+    `ComboBox`는 `FlatStyle=Flat` 다크. 드롭다운 목록은 `options`에서 공급(§4).
+- **범위 메모**: 다크 스킨은 1차 구현 포함. 글로우/네온 발광 효과는 WinForms 한계로 생략(평면 색으로 표현),
+  애니메이션(스피너 회전 등)은 선택.
