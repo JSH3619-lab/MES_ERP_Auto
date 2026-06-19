@@ -309,6 +309,23 @@ public sealed class PartResult
     public string Saved { get; set; } = "";
     public string Status { get; set; } = "";
     public string Message { get; set; } = "";
+    public DateTime ProcessedAt { get; set; } = DateTime.Now;
+}
+
+public sealed class BinResult
+{
+    public required string PartNo { get; init; }
+    public string Classification { get; set; } = "";
+    public string ProcessName { get; set; } = "";
+    public string BinType { get; set; } = "";
+    public string RetestNo { get; set; } = "";
+    public string BinComplete { get; set; } = "";
+    public string RetestTh { get; set; } = "";
+    public string BinId { get; set; } = "";
+    public string Saved { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Message { get; set; } = "";
+    public DateTime ProcessedAt { get; set; } = DateTime.Now;
 }
 
 public sealed class RuntimePaths
