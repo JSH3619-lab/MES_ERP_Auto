@@ -17,11 +17,11 @@
 - **금지:** `Application.SetHighDpiMode(HighDpiMode.PerMonitorV2)` **런타임 호출 → 하드 크래시**(빈 로그, 시작 즉시 종료). 절대 재시도 말 것.
 - **다음 시도:** `src/UnimesAutomation/app.manifest`에 `dpiAware`/`dpiAwareness`를 선언해 **프로세스 시작 시점에 awareness 고정**(unaware로 잠가 GUI 도입 전 콘솔과 같은 좌표 환경 유지 → 중간 뒤집힘·축소 차단). 매니페스트는 OS가 프로세스 생성 시 읽으므로 위 런타임 크래시와 무관. 단 고DPI 실기 테스트 필수(코드 빌드만으론 검증 불가). 안 되면 GUI 도입 커밋 `b2abec0` 이전과 비교.
 
-### 보존된 미적용 작업: `git stash@{0}`
-- BIN `900013`(데이터가 변경되었습니다/조회? 예/아니오) 팝업 핸들러 — 저장 실패로 dirty된 그리드가 다음 조회에서 막는 것을 [예]로 복구용. (BIN 진입이 안 되니 아직 live 검증 안 됨.)
-- 시안 색 변경(`UiTheme.TextDim = Accent`).
-- 필요하면 골라 재적용. 정지 버튼은 이미 `b8caed1`로 커밋됨(stash 것 아님).
-- 복구: `git stash show -p stash@{0}` 로 확인, `git stash pop`. 롤백 전 tip은 태그 `backup/tip-6a01d97`.
+### 보존된 미적용 작업: 브랜치 `origin/backup/session-stash` (push됨)
+- 이번 세션 전체 WIP 스냅샷을 `backup/session-stash` 브랜치(6a01d97 기반)로 커밋·**push**함 → 다른 PC에서도 접근 가능.
+- 그 안의 고유분(feature/mes-gui에 아직 없는 것): BIN `900013`(데이터가 변경되었습니다/조회? 예/아니오) 팝업 핸들러 — 저장 실패로 dirty된 그리드가 다음 조회에서 막는 것을 [예]로 복구용(BIN 진입이 안 돼 아직 live 검증 안 됨); 시안 색(`UiTheme.TextDim = Accent` + 시안 창 프레임).
+- WinExe·콘솔 가드·정지 버튼은 이미 feature/mes-gui에 더 깔끔한 형태로 커밋됨(f04b37b, b8caed1) — 그쪽 사용.
+- 고유분 가져오려면 `git checkout backup/session-stash`로 보거나 diff로 골라 적용. (이 PC 로컬엔 `git stash@{0}`·태그 `backup/tip-6a01d97`도 남아 있음.)
 
 ---
 
