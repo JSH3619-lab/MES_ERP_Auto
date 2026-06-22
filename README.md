@@ -8,11 +8,10 @@ The app uses Windows UI Automation, not image/OCR recognition. Screenshots and U
 
 1. Launch or attach to UNIMES.
 2. Auto-login when credentials are configured.
-3. Ask for work scope: `품목정보관리만`, `BIN 정보 관리만`, or `둘 다`.
-4. Ask for Part No values.
-5. Run `품목정보관리`.
-6. Run `품목별 BIN 정보 관리` for valid/selected parts.
-7. Write result CSV and show a completion summary.
+3. Open the GUI for work scope, Part No input, safety state, progress, and logs.
+4. Run `품목정보관리`, `품목별 BIN 정보 관리`, or `둘 다`.
+5. Stop cooperatively from the GUI when needed.
+6. Write one result xlsx and show a completion summary.
 
 ## Safety
 
@@ -22,12 +21,18 @@ Default behavior is safe:
 - `saveEnabled=false`
 
 Buttons containing save/delete/apply style keywords are blocked unless `saveEnabled=true`.
-Use `run_unimes_automation_save_test.cmd` only for an intentional save test with a local ignored config.
+Use an explicit local ignored config, such as `appsettings.save-test.json`, only for intentional save tests.
 
 ## Build
 
 ```powershell
-dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj
+dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj -c Release
+```
+
+## Publish Single EXE
+
+```powershell
+dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\dist
 ```
 
 ## Run
@@ -67,6 +72,9 @@ These folders are generated and ignored by git:
 - `logs/`
 - `screenshots/`
 - `output/`
+- `dist/`
+
+Results are written to `output/result_<timestamp>.xlsx` with separate sheets for `품목정보관리` and `BIN 정보관리`.
 
 ## Documents
 

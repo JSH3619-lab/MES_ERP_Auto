@@ -42,6 +42,17 @@
 | `showPartInputDialog` | 시작 시 파트 입력 다이얼로그 표시 |
 | `showCompletionDialog` | 종료 시 완료 요약 다이얼로그 표시 |
 
+## 동작 시간 조정 기준
+
+현재 설정 파일에서 바로 조정 가능한 시간 값은 다음이다.
+
+- `app.launchTimeoutSeconds`: UNIMES 창 탐색 대기.
+- `app.loginTimeoutSeconds`: 로그인/메인 창 전환 대기.
+- `app.popupTimeoutSeconds`: 시작/전환 중 Continue류 팝업 대기.
+- `workflow.searchDelayMilliseconds`: 품목/BIN 조회 후 MES 그리드 안정화 대기.
+
+메뉴 탐색 재시도, 팝업 행 검색, BIN 행 추가 확인 같은 더 짧은 대기값은 현재 `UnimesApp.cs` 내부 고정값이다. 다음 타이밍 조정 작업에서는 live 로그 기준으로 필요한 값만 좁게 수정한다.
+
 ## itemInfo
 | 키 | 의미 |
 |---|---|

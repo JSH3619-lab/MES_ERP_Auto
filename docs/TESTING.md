@@ -3,8 +3,16 @@
 ## 빌드와 단위 테스트
 
 ```powershell
-dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj
-dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj
+dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj -c Release
+dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj -c Release --no-restore
+```
+
+## 단일 exe publish
+
+`dist/`는 git ignore 대상이다. 배포/실기 테스트용 단일 exe가 필요하면 로컬에서 다시 만든다.
+
+```powershell
+dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\dist
 ```
 
 ## 실행 모드
@@ -32,7 +40,7 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 | 실행 로그 | `logs/run_YYYYMMDD_HHMMSS.log` |
 | UI 덤프 | `logs/ui_dump_*.txt` |
 | 스크린샷 | `screenshots/*.png` |
-| 결과 CSV | `output/result_*.csv` |
+| 결과 xlsx | `output/result_*.xlsx` |
 
 위 폴더는 모두 git ignore 대상이며 필요하면 삭제해도 다음 실행 때 다시 생성된다.
 
@@ -50,4 +58,6 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 2. 작업 범위 `품목정보관리만`: 정상 Part와 미존재 Part를 섞어 실행.
 3. 작업 범위 `BIN 정보 관리만`: 품목 코드 팝업 선택 후 기존 행/신규 행 케이스 실행.
 4. 작업 범위 `둘 다`: 품목정보관리 완료창 없이 BIN 정보 관리로 이어지고, 전체 종료 후 결과창이 한 번만 뜨는지 확인.
-5. 저장 테스트: `dryRun=false`, `saveEnabled=true`인 로컬 설정으로만 제한 실행.
+5. 실행 중 GUI 창 크기가 줄어들지 않고 좌표 클릭이 빗나가지 않는지 확인.
+6. 정지 버튼: 실행 중 `정지` 요청 후 안전 지점에서 중단되고 결과 파일이 남는지 확인.
+7. 저장 테스트: `dryRun=false`, `saveEnabled=true`인 로컬 설정으로만 제한 실행.
