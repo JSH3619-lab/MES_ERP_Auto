@@ -35,6 +35,7 @@ public sealed class MainForm : Form
     private readonly Button _run = new() { Text = "실행", Width = 130, Dock = DockStyle.Right };
     private readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None };
     private bool _running;
+    private CancellationTokenSource? _cts;
 
     public MainForm(RootConfig config, RuntimePaths paths, SimpleLogger logger, ScreenshotService screenshots, CommandLineOptions options, string appSettingsPath)
     {
@@ -191,7 +192,17 @@ public sealed class MainForm : Form
         StyleButton(_settings, UiTheme.TextDim, UiTheme.Border, "CONFIG");
         StyleButton(_run, UiTheme.Accent, UiTheme.Accent, "실행");
         _settings.Click += (_, _) => OpenSettings();
-        _run.Click += async (_, _) => await RunAsync();
+        _run.Click += async (_, _) =>
+        {
+            if (_running)
+            {
+                RequestAbort();
+            }
+            else
+            {
+                await RunAsync();
+            }
+        };
         buttonBar.Controls.Add(_settings);
         buttonBar.Controls.Add(_run);
         body.Controls.Add(buttonBar, 0, 8);
@@ -401,6 +412,8 @@ public sealed class MainForm : Form
         };
         _config.Workflow.RuntimePartRequests = parts;
 
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
         SetRunning(true);
         try
         {
@@ -408,8 +421,12 @@ public sealed class MainForm : Form
             {
                 var safety = new SafetyGuard(_config.Safety, _logger);
                 var app = new UnimesApp(_config, _paths, _logger, _screenshots, safety);
-                return app.RunAsync(_options).GetAwaiter().GetResult();
-            });
+                return app.RunAsync(_options, token).GetAwaiter().GetResult();
+            }, token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Info("실행이 사용자 요청으로 중단되었습니다.");
         }
         catch (System.Exception ex)
         {
@@ -417,8 +434,23 @@ public sealed class MainForm : Form
         }
         finally
         {
+            _cts.Dispose();
+            _cts = null;
             SetRunning(false);
         }
+    }
+
+    private void RequestAbort()
+    {
+        if (_cts is null || _cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _logger.Info("사용자 정지 요청. 현재 Part의 안전 지점에서 멈춥니다.");
+        _cts.Cancel();
+        _run.Text = "정지 중…";
+        _run.Enabled = false;
     }
 
     private void SetRunning(bool running)
@@ -430,8 +462,8 @@ public sealed class MainForm : Form
         _safetyToggle.Enabled = !running;
         if (running)
         {
-            StyleButton(_run, UiTheme.Danger, UiTheme.Danger, "ABORT");
-            _run.Enabled = false;
+            StyleButton(_run, UiTheme.Danger, UiTheme.Danger, "■ 정지");
+            _run.Enabled = true;
         }
         else
         {

@@ -33,8 +33,11 @@ public sealed class UnimesApp
 
     public bool HasExistingLoggedInMainWindow() => FindExistingMainWindow() is not null;
 
-    public async Task<int> RunAsync(CommandLineOptions options)
+    private CancellationToken _cancel;
+
+    public async Task<int> RunAsync(CommandLineOptions options, CancellationToken cancel = default)
     {
+        _cancel = cancel;
         _logger.Info("===== UNIMES automation bootstrap started =====");
         _logger.Info($"Options: noLaunch={options.NoLaunch}, dumpOnly={options.DumpOnly}");
         _logger.Info($"Safety: dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -237,6 +240,12 @@ public sealed class UnimesApp
         AutomationElement? searchButton = null;
         foreach (var request in requests)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info("정지 요청 감지. 품목정보관리 남은 Part 처리 중단.");
+                break;
+            }
+
             var classification = PartClassifier.Classify(request.PartNo);
             var categoryItem = (_config.ResolveCategory(classification)?.ItemInfo) ?? new ItemInfoValues();
 
@@ -472,6 +481,12 @@ public sealed class UnimesApp
 
         foreach (var request in requests)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info("정지 요청 감지. BIN 정보 관리 남은 Part 처리 중단.");
+                break;
+            }
+
             var resultRecorded = false;
             var cls = PartClassifier.Classify(request.PartNo);
             var rowProcess = "";
@@ -1813,6 +1828,12 @@ public sealed class UnimesApp
         _logger.Info($"Navigating to '{menuName}' via F3 menu search.");
         for (var attempt = 1; attempt <= 3; attempt++)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info($"정지 요청 감지. '{menuName}' 메뉴 탐색 중단.");
+                return;
+            }
+
             BringToFront(mainWindow);
             await Task.Delay(250);
 
