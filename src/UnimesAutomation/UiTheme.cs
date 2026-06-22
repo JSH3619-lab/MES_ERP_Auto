@@ -10,12 +10,12 @@ public static class UiTheme
     public static readonly Color Surface = Color.FromArgb(12, 18, 31);        // #0C121F
     public static readonly Color SurfaceDeep = Color.FromArgb(6, 10, 17);     // #060A11
     public static readonly Color Border = Color.FromArgb(22, 59, 71);         // #163B47
-    public static readonly Color Accent = Color.FromArgb(43, 212, 216);       // #2BD4D8 cyan
-    public static readonly Color Warn = Color.FromArgb(245, 182, 66);         // #F5B642 gold
+    public static readonly Color Accent = Color.FromArgb(56, 233, 238);       // bright cyan
+    public static readonly Color Warn = Color.FromArgb(255, 196, 77);         // bright gold
     public static readonly Color Danger = Color.FromArgb(255, 107, 107);      // #FF6B6B
-    public static readonly Color Text = Color.FromArgb(191, 239, 243);        // #BFEFF3
-    public static readonly Color TextDim = Color.FromArgb(127, 185, 194);     // #7FB9C2
-    public static readonly Color TextFaint = Color.FromArgb(78, 107, 120);    // #4E6B78
+    public static readonly Color Text = Color.FromArgb(223, 251, 253);        // bright text
+    public static readonly Color TextDim = Color.FromArgb(170, 222, 230);     // brighter dim
+    public static readonly Color TextFaint = Color.FromArgb(116, 156, 168);   // brighter faint
 
     public static Font Mono(float size = 9f, FontStyle style = FontStyle.Regular)
         => new("Consolas", size, style);
