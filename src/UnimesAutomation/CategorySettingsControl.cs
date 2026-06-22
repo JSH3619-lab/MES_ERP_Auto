@@ -20,7 +20,7 @@ public sealed class CategorySettingsControl : UserControl
         binHeader.Controls.Add(new Label { Text = "BIN 정보관리", AutoSize = true });
         var add = new Button { Text = "행 추가", AutoSize = true };
         var del = new Button { Text = "행 삭제", AutoSize = true };
-        add.Click += (_, _) => _bin.Rows.Add();
+        add.Click += (_, _) => AddBinRow("", "", "", "", "");
         del.Click += (_, _) => { if (_bin.CurrentRow is { IsNewRow: false } r) _bin.Rows.Remove(r); };
         binHeader.Controls.Add(add);
         binHeader.Controls.Add(del);
@@ -49,6 +49,11 @@ public sealed class CategorySettingsControl : UserControl
         _bin.Columns.Add(new DataGridViewTextBoxColumn { Name = "retestNo", HeaderText = "Retest No" });
         _bin.Columns.Add(ComboCol("binComplete", "BIN 완료여부", _options.BinCompletes));
         _bin.Columns.Add(ComboCol("retestTh", "Retest TH", _options.RetestThs));
+
+        // BIN ID는 파트 용량코드로 자동 산출(편집 불가). 표시만 한다.
+        var binId = new DataGridViewTextBoxColumn { Name = "binId", HeaderText = "BIN ID", ReadOnly = true };
+        binId.DefaultCellStyle.ForeColor = UiTheme.TextFaint;
+        _bin.Columns.Add(binId);
     }
 
     private static DataGridViewComboBoxColumn YesNoCol(string name, string header)
@@ -65,17 +70,22 @@ public sealed class CategorySettingsControl : UserControl
         return col;
     }
 
+    private void AddBinRow(string process, string binType, string retestNo, string binComplete, string retestTh)
+    {
+        _bin.Rows.Add(process, binType, retestNo, binComplete, retestTh, "자동 산출");
+    }
+
     private void LoadFrom(CategoryConfig category)
     {
         _item.Rows.Add(category.ItemInfo.BinManage, category.ItemInfo.TurnKey, category.ItemInfo.AssemblyIn, category.ItemInfo.DefectWarehouse);
         foreach (var r in category.BinInfo.Rows)
         {
-            _bin.Rows.Add(r.ProcessName, r.BinType, r.RetestNo, r.BinComplete, r.RetestTh);
+            AddBinRow(r.ProcessName, r.BinType, r.RetestNo, r.BinComplete, r.RetestTh);
         }
 
         if (category.BinInfo.Rows.Count == 0)
         {
-            _bin.Rows.Add();
+            AddBinRow("", "", "", "", "");
         }
     }
 
