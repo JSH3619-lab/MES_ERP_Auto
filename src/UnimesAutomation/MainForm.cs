@@ -47,10 +47,10 @@ public sealed class MainForm : Form
 
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(600, 660);
+        ClientSize = new Size(580, 600);
         BackColor = UiTheme.Border;          // 1px 외곽선
         Padding = new Padding(1);
-        Font = UiTheme.Mono(9f);
+        Font = UiTheme.Mono(10.5f);
 
         Controls.Add(BuildBody());
         Controls.Add(BuildHeader());
@@ -75,7 +75,7 @@ public sealed class MainForm : Form
             Location = new Point(14, 11),
             Text = "▌ UNIMES // AUTOMATION",
             ForeColor = UiTheme.Text,
-            Font = UiTheme.Mono(10.5f, FontStyle.Bold)
+            Font = UiTheme.Mono(13f, FontStyle.Bold)
         };
         title.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) StartDrag(); };
 
@@ -89,7 +89,7 @@ public sealed class MainForm : Form
         };
         rightBar.Controls.Add(HeaderButton("✕", UiTheme.Danger, Close));
         rightBar.Controls.Add(HeaderButton("—", UiTheme.TextDim, () => WindowState = FormWindowState.Minimized));
-        rightBar.Controls.Add(new Label { Text = "● LINK: MES", AutoSize = true, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(9f), Margin = new Padding(8, 4, 8, 0) });
+        rightBar.Controls.Add(new Label { Text = "● LINK: MES", AutoSize = true, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(10.5f), Margin = new Padding(8, 4, 8, 0) });
 
         header.Controls.Add(title);
         header.Controls.Add(rightBar);
@@ -98,7 +98,7 @@ public sealed class MainForm : Form
 
     private Label HeaderButton(string text, Color color, Action onClick)
     {
-        var b = new Label { Text = text, AutoSize = true, ForeColor = color, Font = UiTheme.Mono(11f, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(6, 2, 6, 0) };
+        var b = new Label { Text = text, AutoSize = true, ForeColor = color, Font = UiTheme.Mono(12f, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(6, 2, 6, 0) };
         b.Click += (_, _) => onClick();
         return b;
     }
@@ -114,15 +114,15 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 9
         };
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); // part label
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 78)); // part box
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); // scope
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 22)); // status
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); // part label
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 88)); // part box
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); // scope
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 26)); // status
         body.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));  // progress
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 22)); // log header
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); // log header
         body.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // log
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 46)); // banner
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 54)); // buttons
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 52)); // banner
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 60)); // buttons
 
         body.Controls.Add(Dim("PART NO  ·  한 줄에 하나씩 / 쉼표·공백 구분"), 0, 0);
 
@@ -133,25 +133,25 @@ public sealed class MainForm : Form
         _parts.BorderStyle = BorderStyle.FixedSingle;
         _parts.BackColor = UiTheme.SurfaceDeep;
         _parts.ForeColor = UiTheme.Text;
-        _parts.Font = UiTheme.Mono(9.5f);
+        _parts.Font = UiTheme.Mono(11f);
         body.Controls.Add(_parts, 0, 1);
 
         var scopeRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Margin = new Padding(0) };
-        scopeRow.Controls.Add(new Label { Text = "작업 범위", AutoSize = true, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(9f), Margin = new Padding(0, 8, 8, 0) });
+        scopeRow.Controls.Add(new Label { Text = "작업 범위", AutoSize = true, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(10.5f), Margin = new Padding(0, 8, 8, 0) });
         _scope.Items.AddRange(["통합품목관리", "품목정보관리", "품목 BIN정보 관리"]);
         _scope.SelectedIndex = 0;
         _scope.FlatStyle = FlatStyle.Flat;
         _scope.BackColor = UiTheme.SurfaceDeep;
         _scope.ForeColor = UiTheme.Text;
-        _scope.Font = UiTheme.Mono(9.5f);
+        _scope.Font = UiTheme.Mono(11f);
         scopeRow.Controls.Add(_scope);
         body.Controls.Add(scopeRow, 0, 2);
 
         var statusRow = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
         _statusLabel.ForeColor = UiTheme.Accent;
-        _statusLabel.Font = UiTheme.Mono(9.5f);
+        _statusLabel.Font = UiTheme.Mono(11f);
         _counterLabel.ForeColor = UiTheme.TextDim;
-        _counterLabel.Font = UiTheme.Mono(9.5f);
+        _counterLabel.Font = UiTheme.Mono(11f);
         statusRow.Controls.Add(_statusLabel);
         statusRow.Controls.Add(_counterLabel);
         body.Controls.Add(statusRow, 0, 3);
@@ -163,23 +163,23 @@ public sealed class MainForm : Form
 
         var logHeader = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
         logHeader.Controls.Add(new Label { Text = Path.GetFileName(_paths.RunLogPath), Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(8.5f), Width = 240 });
-        logHeader.Controls.Add(new Label { Text = "EXEC LOG", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(9f), Width = 120 });
+        logHeader.Controls.Add(new Label { Text = "EXEC LOG", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(10.5f), Width = 120 });
         body.Controls.Add(logHeader, 0, 5);
 
         var logHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.SurfaceDeep, Padding = new Padding(8, 6, 8, 6) };
         _log.BackColor = UiTheme.SurfaceDeep;
         _log.ForeColor = UiTheme.TextDim;
-        _log.Font = UiTheme.Mono(9f);
+        _log.Font = UiTheme.Mono(10.5f);
         logHost.Controls.Add(_log);
         body.Controls.Add(logHost, 0, 6);
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(26, 20, 10), Padding = new Padding(10, 0, 8, 0) };
         banner.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(92, 68, 16)); e.Graphics.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1); };
-        _safetyLabel.Font = UiTheme.Mono(9.5f);
+        _safetyLabel.Font = UiTheme.Mono(11f);
         _safetyToggle.FlatStyle = FlatStyle.Flat;
         _safetyToggle.BackColor = Color.FromArgb(26, 20, 10);
         _safetyToggle.ForeColor = UiTheme.Warn;
-        _safetyToggle.Font = UiTheme.Mono(9f);
+        _safetyToggle.Font = UiTheme.Mono(10.5f);
         _safetyToggle.FlatAppearance.BorderColor = Color.FromArgb(92, 68, 16);
         _safetyToggle.Click += (_, _) => ToggleSafety();
         banner.Controls.Add(_safetyLabel);
@@ -200,7 +200,7 @@ public sealed class MainForm : Form
     }
 
     private static Label Dim(string text)
-        => new() { Text = text, Dock = DockStyle.Fill, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(9f), TextAlign = ContentAlignment.MiddleLeft };
+        => new() { Text = text, Dock = DockStyle.Fill, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(10.5f), TextAlign = ContentAlignment.MiddleLeft };
 
     private static void StyleButton(Button b, Color fg, Color border, string text)
     {
@@ -209,7 +209,7 @@ public sealed class MainForm : Form
         b.FlatStyle = FlatStyle.Flat;
         b.BackColor = UiTheme.Surface;
         b.ForeColor = fg;
-        b.Font = UiTheme.Mono(9.5f, FontStyle.Bold);
+        b.Font = UiTheme.Mono(11f, FontStyle.Bold);
         b.FlatAppearance.BorderColor = border;
     }
 
