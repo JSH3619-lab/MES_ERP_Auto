@@ -33,8 +33,11 @@ public sealed class UnimesApp
 
     public bool HasExistingLoggedInMainWindow() => FindExistingMainWindow() is not null;
 
-    public async Task<int> RunAsync(CommandLineOptions options)
+    private CancellationToken _cancel;
+
+    public async Task<int> RunAsync(CommandLineOptions options, CancellationToken cancel = default)
     {
+        _cancel = cancel;
         _logger.Info("===== UNIMES automation bootstrap started =====");
         _logger.Info($"Options: noLaunch={options.NoLaunch}, dumpOnly={options.DumpOnly}");
         _logger.Info($"Safety: dryRun={_config.Safety.DryRun}, saveEnabled={_config.Safety.SaveEnabled}");
@@ -237,6 +240,12 @@ public sealed class UnimesApp
         AutomationElement? searchButton = null;
         foreach (var request in requests)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info("정지 요청 감지. 품목정보관리 남은 Part 처리 중단.");
+                break;
+            }
+
             var classification = PartClassifier.Classify(request.PartNo);
             var categoryItem = (_config.ResolveCategory(classification)?.ItemInfo) ?? new ItemInfoValues();
 
@@ -472,6 +481,12 @@ public sealed class UnimesApp
 
         foreach (var request in requests)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info("정지 요청 감지. BIN 정보 관리 남은 Part 처리 중단.");
+                break;
+            }
+
             var resultRecorded = false;
             var cls = PartClassifier.Classify(request.PartNo);
             var rowProcess = "";
@@ -1813,6 +1828,12 @@ public sealed class UnimesApp
         _logger.Info($"Navigating to '{menuName}' via F3 menu search.");
         for (var attempt = 1; attempt <= 3; attempt++)
         {
+            if (_cancel.IsCancellationRequested)
+            {
+                _logger.Info($"정지 요청 감지. '{menuName}' 메뉴 탐색 중단.");
+                return;
+            }
+
             BringToFront(mainWindow);
             await Task.Delay(250);
 
@@ -3696,6 +3717,11 @@ public sealed class UnimesApp
             return false;
         }
 
+        if (IsOwnConsoleWindow(name, className))
+        {
+            return false;
+        }
+
         // 같은 플랫폼(Bizentro.App.MAIN.Shell)에서 MES와 ERP가 동일 프로세스/클래스로 떠서
         // 타이틀로만 구분된다(MES='UNIMES - ...', ERP='UNIERP - ...'). 제외 토큰이 타이틀에
         // 있으면 프로세스명 힌트보다 우선해 후보에서 뺀다(예: ERP 창을 잡지 않도록).
@@ -4111,6 +4137,20 @@ public sealed class UnimesApp
 
         return processName.Equals("UnimesAutomation", StringComparison.OrdinalIgnoreCase) ||
                processName.Equals("dotnet", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // exe를 실행한 콘솔/터미널 호스트(WindowsTerminal·conhost 등)는 자기 자신의 실행 경로
+    // (...\UnimesAutomation.exe)를 창 제목으로 표시한다. 그 제목엔 "Unimes"가 들어가 있어
+    // WindowTitleContains=["UNIMES"] 매칭에 걸려 MES로 오탐되므로 후보에서 제외한다.
+    private static bool IsOwnConsoleWindow(string name, string className)
+    {
+        if (name.Contains("UnimesAutomation", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return className.Equals("CASCADIA_HOSTING_WINDOW_CLASS", StringComparison.OrdinalIgnoreCase) ||
+               className.Equals("ConsoleWindowClass", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetProcessName(int? processId)

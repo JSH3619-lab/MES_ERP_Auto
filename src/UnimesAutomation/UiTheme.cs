@@ -14,8 +14,8 @@ public static class UiTheme
     public static readonly Color Warn = Color.FromArgb(255, 196, 77);         // bright gold
     public static readonly Color Danger = Color.FromArgb(255, 107, 107);      // #FF6B6B
     public static readonly Color Text = Color.FromArgb(223, 251, 253);        // bright text
-    public static readonly Color TextDim = Color.FromArgb(170, 222, 230);     // brighter dim
-    public static readonly Color TextFaint = Color.FromArgb(116, 156, 168);   // brighter faint
+    public static readonly Color TextDim = Accent;                            // 실행 버튼과 동일한 시안
+    public static readonly Color TextFaint = Color.FromArgb(120, 205, 216);   // 밝은 보조 시안
 
     public static Font Mono(float size = 9f, FontStyle style = FontStyle.Regular)
         => new("Consolas", size, style);
