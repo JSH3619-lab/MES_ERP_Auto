@@ -30,7 +30,6 @@ public sealed class MainForm : Form
     private readonly Panel _progressTrack = new() { Dock = DockStyle.Fill };
     private readonly Panel _progressFill = new() { Dock = DockStyle.Left, Width = 0 };
     private readonly Label _safetyLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button _safetyToggle = new() { Text = "변경", Width = 70, Dock = DockStyle.Right };
     private readonly Button _settings = new() { Text = "CONFIG", Width = 120, Dock = DockStyle.Left };
     private readonly Button _run = new() { Text = "실행", Width = 130, Dock = DockStyle.Right };
     private readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None };
@@ -59,6 +58,7 @@ public sealed class MainForm : Form
         _logger.LineWritten += OnLogLine;
         FormClosed += (_, _) => _logger.LineWritten -= OnLogLine;
 
+        ForceRealSaveMode();
         UpdateSafetyLabel();
         UpdateStatus();
     }
@@ -177,14 +177,7 @@ public sealed class MainForm : Form
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(26, 20, 10), Padding = new Padding(10, 0, 8, 0) };
         banner.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(92, 68, 16)); e.Graphics.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1); };
         _safetyLabel.Font = UiTheme.Mono(12.5f);
-        _safetyToggle.FlatStyle = FlatStyle.Flat;
-        _safetyToggle.BackColor = Color.FromArgb(26, 20, 10);
-        _safetyToggle.ForeColor = UiTheme.Warn;
-        _safetyToggle.Font = UiTheme.Mono(12f);
-        _safetyToggle.FlatAppearance.BorderColor = Color.FromArgb(92, 68, 16);
-        _safetyToggle.Click += (_, _) => ToggleSafety();
         banner.Controls.Add(_safetyLabel);
-        banner.Controls.Add(_safetyToggle);
         body.Controls.Add(banner, 0, 7);
 
         var buttonBar = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 12, 0, 0) };
@@ -336,36 +329,14 @@ public sealed class MainForm : Form
 
     private void UpdateSafetyLabel()
     {
-        var realSave = _config.Safety.SaveEnabled && !_config.Safety.DryRun;
-        _safetyLabel.Text = realSave
-            ? "⚠  REAL SAVE MODE · 실제 저장 켜짐"
-            : "⛨  SAFE MODE · 변경 미리보기 (저장 잠금)";
-        _safetyLabel.ForeColor = realSave ? UiTheme.Danger : UiTheme.Warn;
+        _safetyLabel.Text = "⚠  REAL SAVE MODE · 실제 MES 저장";
+        _safetyLabel.ForeColor = UiTheme.Danger;
     }
 
-    private void ToggleSafety()
+    private void ForceRealSaveMode()
     {
-        var turningOn = _config.Safety.DryRun || !_config.Safety.SaveEnabled;
-        if (turningOn)
-        {
-            var ok = MessageBox.Show(
-                "정말 실제 MES에 저장을 켜시겠습니까? 저장 동작이 실제로 일어납니다.",
-                "실제 저장 켜기", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (ok != DialogResult.Yes)
-            {
-                return;
-            }
-
-            _config.Safety.DryRun = false;
-            _config.Safety.SaveEnabled = true;
-        }
-        else
-        {
-            _config.Safety.DryRun = true;
-            _config.Safety.SaveEnabled = false;
-        }
-
-        UpdateSafetyLabel();
+        _config.Safety.DryRun = false;
+        _config.Safety.SaveEnabled = true;
     }
 
     private void OpenSettings()
@@ -374,6 +345,7 @@ public sealed class MainForm : Form
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
             CopyInto(ConfigStore.Load(_appSettingsPath));
+            ForceRealSaveMode();
             UpdateSafetyLabel();
             _logger.Info("설정이 저장되어 다음 실행부터 반영됩니다.");
         }
@@ -411,6 +383,7 @@ public sealed class MainForm : Form
             _ => WorkScope.Both
         };
         _config.Workflow.RuntimePartRequests = parts;
+        ForceRealSaveMode();
 
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
@@ -459,7 +432,6 @@ public sealed class MainForm : Form
         _parts.Enabled = !running;
         _scope.Enabled = !running;
         _settings.Enabled = !running;
-        _safetyToggle.Enabled = !running;
         if (running)
         {
             StyleButton(_run, UiTheme.Danger, UiTheme.Danger, "■ 정지");

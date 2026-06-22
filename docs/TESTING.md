@@ -31,7 +31,9 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-on
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config .\appsettings.json
 ```
 
-기본값은 `dryRun=true`, `saveEnabled=false`라서 저장은 일어나지 않는다. 실제 저장 검증은 의도적으로 `appsettings.save-test.json` 또는 별도 로컬 설정을 사용한다.
+일반 GUI 실행은 실제 저장 모드로 고정된다. 테스트 Part를 넣기 전에 UNIMES 대상 환경과 Part 목록을 확인한다.
+
+`--dump-only` 또는 별도 CLI 실행에서만 `safety.dryRun/saveEnabled` 설정을 직접 확인한다.
 
 ## 산출물 위치
 
@@ -50,6 +52,7 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 - 로그인 실패 화면은 실제 서버 오류 + `Try again` 링크 조합으로만 처리되어야 한다.
 - 자동 로그인 시 ID/PW가 같은 행의 좌/우 입력칸에 들어갔는지 확인한다.
 - 품목정보관리 미존재 Part는 경고 확인 후 SKIPPED로 끝나야 한다.
+- 로그인 후 Continue 팝업은 자동 조작하지 않는다. 로그상 메인 화면 감지 후 workflow가 시작되는지 확인한다.
 - BIN 행 추가는 클릭 성공 로그가 아니라 신규 `BIN 정보 선택` 행 발견 로그가 기준이다.
 
 ## 실제 MES 회귀 시나리오
@@ -60,4 +63,4 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --config 
 4. 작업 범위 `둘 다`: 품목정보관리 완료창 없이 BIN 정보 관리로 이어지고, 전체 종료 후 결과창이 한 번만 뜨는지 확인.
 5. 실행 중 GUI 창 크기가 줄어들지 않고 좌표 클릭이 빗나가지 않는지 확인.
 6. 정지 버튼: 실행 중 `정지` 요청 후 안전 지점에서 중단되고 결과 파일이 남는지 확인.
-7. 저장 테스트: `dryRun=false`, `saveEnabled=true`인 로컬 설정으로만 제한 실행.
+7. 저장 테스트: GUI는 실제 저장 모드이므로 테스트 Part와 대상 MES 환경을 확인한 뒤 제한 실행.

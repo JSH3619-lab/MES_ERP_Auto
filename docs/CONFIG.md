@@ -11,7 +11,7 @@
 | `windowTitleExcludes` | **제외** 제목 토큰. 기본 `["UNIERP"]` — ERP 창 배제(필수) |
 | `processNameHints` | 약한 신호용 프로세스명 힌트 |
 | `launchMode` | `attachOrLaunch`(기본) / `attach`(기존 창만) / `launch`(항상 새로) |
-| `launchTimeoutSeconds` / `loginTimeoutSeconds` / `popupTimeoutSeconds` | 대기 시간 |
+| `launchTimeoutSeconds` / `loginTimeoutSeconds` | 실행/로그인 대기 시간 |
 | `uiDumpMaxDepth` | UI 덤프 최대 깊이 |
 
 ## login
@@ -28,18 +28,18 @@
 ## safety
 | 키 | 의미 |
 |---|---|
-| `dryRun` | 기본 `true`. 화면 변경 없이 '변경 예정'만 판별 |
-| `saveEnabled` | 기본 `false`. 위험 버튼/저장 허용 게이트 |
+| `dryRun` | CLI/덤프 실행용 저장 게이트. GUI 실행은 `false`로 고정 |
+| `saveEnabled` | CLI/덤프 실행용 저장 허용 값. GUI 실행은 `true`로 고정 |
+
+GUI에서는 읽기 전용 토글을 제공하지 않는다. 실행 직전 실제 저장 모드로 고정하며, `SafetyGuard`는 저장 외 위험 버튼 차단용으로 남는다.
 
 ## workflow
 | 키 | 의미 |
 |---|---|
 | `enabled` | 품목정보관리 워크플로우 실행 여부 |
-| `inputPartsPath` | 입력 CSV 경로(입력 다이얼로그가 우선) |
+| `inputPartsPath` | CLI/덤프 실행용 입력 CSV 경로. 일반 GUI 실행은 화면 입력 Part 목록이 우선 |
 | `searchDelayMilliseconds` | 조회 후 대기(ms) |
 | `stopOnFirstFailure` | 첫 실패 시 중단 |
-| `showWorkScopeDialog` | 시작 시 작업 범위 선택 다이얼로그 표시(`품목정보관리만` / `BIN 정보 관리만` / `둘 다`) |
-| `showPartInputDialog` | 시작 시 파트 입력 다이얼로그 표시 |
 | `showCompletionDialog` | 종료 시 완료 요약 다이얼로그 표시 |
 
 ## 동작 시간 조정 기준
@@ -48,8 +48,9 @@
 
 - `app.launchTimeoutSeconds`: UNIMES 창 탐색 대기.
 - `app.loginTimeoutSeconds`: 로그인/메인 창 전환 대기.
-- `app.popupTimeoutSeconds`: 시작/전환 중 Continue류 팝업 대기.
 - `workflow.searchDelayMilliseconds`: 품목/BIN 조회 후 MES 그리드 안정화 대기.
+
+로그인 후 Continue 팝업은 별도로 조작하지 않는다. 자동 소멸 이후 메인 화면이 감지되면 진행한다.
 
 메뉴 탐색 재시도, 팝업 행 검색, BIN 행 추가 확인 같은 더 짧은 대기값은 현재 `UnimesApp.cs` 내부 고정값이다. 다음 타이밍 조정 작업에서는 live 로그 기준으로 필요한 값만 좁게 수정한다.
 

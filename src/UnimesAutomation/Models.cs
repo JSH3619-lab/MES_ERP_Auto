@@ -51,7 +51,6 @@ public sealed class RootConfig
                 ProcessNameHints = ["UNIMES", "SetupMES", "Bizentro.App.MAIN.ClientAgent", "Bizentro.App.MAIN.Shell"],
                 LaunchTimeoutSeconds = 90,
                 LoginTimeoutSeconds = 180,
-                PopupTimeoutSeconds = 20,
                 UiDumpMaxDepth = 12
             },
             Login = new LoginConfig
@@ -73,7 +72,7 @@ public sealed class RootConfig
             {
                 Enabled = true,
                 InputPartsPath = "input_parts.csv",
-                SearchDelayMilliseconds = 1200,
+                SearchDelayMilliseconds = 900,
                 StopOnFirstFailure = false
             },
             Options = new OptionsConfig(),
@@ -103,9 +102,6 @@ public sealed class AppConfig
 
     [JsonPropertyName("loginTimeoutSeconds")]
     public int LoginTimeoutSeconds { get; set; } = 180;
-
-    [JsonPropertyName("popupTimeoutSeconds")]
-    public int PopupTimeoutSeconds { get; set; } = 20;
 
     [JsonPropertyName("uiDumpMaxDepth")]
     public int UiDumpMaxDepth { get; set; } = 12;
@@ -168,19 +164,13 @@ public sealed class WorkflowConfig
     public string InputPartsPath { get; set; } = "input_parts.csv";
 
     [JsonPropertyName("searchDelayMilliseconds")]
-    public int SearchDelayMilliseconds { get; set; } = 1200;
+    public int SearchDelayMilliseconds { get; set; } = 900;
 
     [JsonPropertyName("stopOnFirstFailure")]
     public bool StopOnFirstFailure { get; set; } = false;
 
-    [JsonPropertyName("showPartInputDialog")]
-    public bool ShowPartInputDialog { get; set; } = true;
-
     [JsonPropertyName("showCompletionDialog")]
     public bool ShowCompletionDialog { get; set; } = true;
-
-    [JsonPropertyName("showWorkScopeDialog")]
-    public bool ShowWorkScopeDialog { get; set; } = true;
 
     [JsonIgnore]
     public WorkScope RuntimeWorkScope { get; set; } = WorkScope.ItemInfo;

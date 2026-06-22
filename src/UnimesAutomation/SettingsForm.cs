@@ -5,6 +5,8 @@ namespace UnimesAutomation;
 
 public sealed class SettingsForm : Form
 {
+    private const string SavedPasswordMask = "********";
+
     private readonly string _path;
     private readonly RootConfig _config;
 
@@ -18,6 +20,9 @@ public sealed class SettingsForm : Form
     private readonly CategorySettingsControl _modulePanel;
     private readonly CategorySettingsControl _compPanel;
     private readonly Panel _host = new() { Dock = DockStyle.Fill };
+    private bool _hasSavedPassword;
+    private bool _passwordEdited;
+    private bool _suppressPasswordChanged;
 
     public SettingsForm(string appSettingsPath)
     {
@@ -49,6 +54,27 @@ public sealed class SettingsForm : Form
 
         LoadLoginFields();
         LoadAdvancedFields();
+        _password.TextChanged += (_, _) =>
+        {
+            if (!_suppressPasswordChanged)
+            {
+                _passwordEdited = true;
+            }
+        };
+        _password.Enter += (_, _) =>
+        {
+            if (_hasSavedPassword && !_passwordEdited && _password.Text == SavedPasswordMask)
+            {
+                SetPasswordText("");
+            }
+        };
+        _password.Leave += (_, _) =>
+        {
+            if (_hasSavedPassword && !_passwordEdited && string.IsNullOrEmpty(_password.Text))
+            {
+                SetPasswordText(SavedPasswordMask);
+            }
+        };
 
         Controls.Add(_host);
         Controls.Add(nav);
@@ -109,6 +135,16 @@ public sealed class SettingsForm : Form
     private void LoadLoginFields()
     {
         _userId.Text = _config.Login.UserId;
+        _hasSavedPassword =
+            _config.Login.UseDpapiPassword &&
+            !string.IsNullOrEmpty(_config.Login.PasswordEncrypted) &&
+            !string.IsNullOrEmpty(SecretProtector.Decrypt(_config.Login.PasswordEncrypted));
+        if (_hasSavedPassword)
+        {
+            SetPasswordText(SavedPasswordMask);
+            _password.PlaceholderText = "저장됨 (변경하려면 새로 입력)";
+        }
+
         _language.Items.AddRange(["한국어", "English"]);
         _language.SelectedItem = _config.Login.Language;
         if (_language.SelectedIndex < 0)
@@ -135,7 +171,7 @@ public sealed class SettingsForm : Form
         _config.Login.UserId = _userId.Text.Trim();
         _config.Login.Language = _language.Text;
         _config.Login.System = _system.Text;
-        if (!string.IsNullOrEmpty(_password.Text))
+        if (_passwordEdited && !string.IsNullOrEmpty(_password.Text))
         {
             _config.Login.PasswordMode = "dpapi";
             _config.Login.PasswordEncrypted = SecretProtector.Encrypt(_password.Text);
@@ -150,5 +186,18 @@ public sealed class SettingsForm : Form
         ConfigStore.Save(_path, _config);
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    private void SetPasswordText(string value)
+    {
+        _suppressPasswordChanged = true;
+        try
+        {
+            _password.Text = value;
+        }
+        finally
+        {
+            _suppressPasswordChanged = false;
+        }
     }
 }

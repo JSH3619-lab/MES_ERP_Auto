@@ -19,6 +19,12 @@ public sealed class SafetyGuard
         "Apply"
     ];
 
+    private static readonly string[] SaveButtonKeywords =
+    [
+        "저장",
+        "Save"
+    ];
+
     private readonly SafetyConfig _config;
     private readonly SimpleLogger _logger;
 
@@ -46,9 +52,12 @@ public sealed class SafetyGuard
             return true;
         }
 
-        if (_config.SaveEnabled)
+        var realSaveMode = _config.SaveEnabled && !_config.DryRun;
+        var saveButton = SaveButtonKeywords.Any(keyword =>
+            name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        if (realSaveMode && saveButton)
         {
-            _logger.Warn($"Dangerous button allowed by saveEnabled=true. button='{name}', keyword='{matched}', reason='{reason}'");
+            _logger.Warn($"Save button allowed by real save mode. button='{name}', keyword='{matched}', reason='{reason}'");
             return true;
         }
 
@@ -76,4 +85,3 @@ public sealed class SafetyGuard
         }
     }
 }
-

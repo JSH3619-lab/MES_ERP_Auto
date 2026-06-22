@@ -13,8 +13,9 @@ BIZENTRO **UNIMES** Windows 데스크톱 앱을 UI Automation(System.Windows.Aut
    `windowTitleExcludes:["UNIERP"]`로 ERP를 배제한다. → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 2. **전체 조회로 MES를 멈추게 하지 말 것.** 잘못된 파트로 빈 값/무필터 조회가 나가면 전체
    품목이 로드돼 MES가 멈춘다. 미존재 시 `recoveryPart`(기파트)로 한 건만 조회해 안전 복구한다.
-3. **저장 게이트.** 기본 `dryRun=true`, `saveEnabled=false`. `SafetyGuard`가
-   `저장/등록/삭제/확정/승인/적용` 버튼을 차단한다. 저장 동작은 명시적으로 켜기 전엔 일어나지 않는다.
+3. **저장 안전장치.** GUI 실행은 실제 저장 모드로 고정한다. `SafetyGuard`는 남겨서 자동화가
+   예상하지 않은 `등록/삭제/확정/승인/적용` 계열 위험 버튼을 누르지 못하게 막는다. 정상 저장은
+   `Ctrl+S` 경로로만 수행한다.
 
 ## 빌드 / 실행
 
