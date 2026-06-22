@@ -5,8 +5,16 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        Console.OutputEncoding = System.Text.Encoding.UTF8;
-        Console.InputEncoding = System.Text.Encoding.UTF8;
+        // WinExe(콘솔 없음)로 실행되면 콘솔 인코딩 설정이 예외를 던진다. GUI에는 무관하므로 무시한다.
+        try
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.InputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch
+        {
+            // no console attached (GUI 실행)
+        }
 
         var options = ParseArgs(args);
         var rootDirectory = FindWorkspaceRoot();

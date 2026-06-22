@@ -3696,6 +3696,11 @@ public sealed class UnimesApp
             return false;
         }
 
+        if (IsOwnConsoleWindow(name, className))
+        {
+            return false;
+        }
+
         // 같은 플랫폼(Bizentro.App.MAIN.Shell)에서 MES와 ERP가 동일 프로세스/클래스로 떠서
         // 타이틀로만 구분된다(MES='UNIMES - ...', ERP='UNIERP - ...'). 제외 토큰이 타이틀에
         // 있으면 프로세스명 힌트보다 우선해 후보에서 뺀다(예: ERP 창을 잡지 않도록).
@@ -4111,6 +4116,20 @@ public sealed class UnimesApp
 
         return processName.Equals("UnimesAutomation", StringComparison.OrdinalIgnoreCase) ||
                processName.Equals("dotnet", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // exe를 실행한 콘솔/터미널 호스트(WindowsTerminal·conhost 등)는 자기 자신의 실행 경로
+    // (...\UnimesAutomation.exe)를 창 제목으로 표시한다. 그 제목엔 "Unimes"가 들어가 있어
+    // WindowTitleContains=["UNIMES"] 매칭에 걸려 MES로 오탐되므로 후보에서 제외한다.
+    private static bool IsOwnConsoleWindow(string name, string className)
+    {
+        if (name.Contains("UnimesAutomation", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return className.Equals("CASCADIA_HOSTING_WINDOW_CLASS", StringComparison.OrdinalIgnoreCase) ||
+               className.Equals("ConsoleWindowClass", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetProcessName(int? processId)
