@@ -1827,8 +1827,13 @@ public sealed class UnimesApp
         {
             ThrowIfCancellationRequested($"'{menuName}' 메뉴 탐색");
 
-            BringToFront(mainWindow);
-            await DelayAsync(50);
+            if (!await EnsureMainWindowForegroundAsync(mainWindow, menuName, attempt))
+            {
+                _logger.Warn($"MES 메인 창 foreground 확보 실패. menu='{menuName}', attempt={attempt}");
+                _screenshots.CaptureDesktop($"menu_foreground_failed_attempt_{attempt}");
+                await DelayAsync(300);
+                continue;
+            }
 
             var menuSearchButton = FindButtonByAutomationIdContains(mainWindow, "Tool : GoSearch")
                 ?? FindButtonByAnyName(mainWindow, ["메뉴찾기"]);
@@ -1849,9 +1854,10 @@ public sealed class UnimesApp
             }
             else
             {
-                _logger.Warn($"메뉴찾기 입력칸 직접 활성화 실패. SendKeys fallback 사용. menu='{menuName}', attempt={attempt}");
-                SendKeys.SendWait("^a");
-                SendKeys.SendWait(EscapeForSendKeys(menuName));
+                _logger.Warn($"메뉴찾기 입력칸 직접 활성화 실패. 메뉴명 SendKeys fallback 생략. menu='{menuName}', attempt={attempt}");
+                _screenshots.CaptureElement(mainWindow, $"menu_search_input_not_found_attempt_{attempt}");
+                await DelayAsync(300);
+                continue;
             }
 
             SendKeys.SendWait("{ENTER}");
@@ -1894,6 +1900,41 @@ public sealed class UnimesApp
         }
 
         _logger.Info($"{menuName} screen confirmed.");
+    }
+
+    private async Task<bool> EnsureMainWindowForegroundAsync(AutomationElement mainWindow, string menuName, int attempt)
+    {
+        var handle = GetNativeHandle(mainWindow);
+        if (handle == IntPtr.Zero)
+        {
+            _logger.Warn($"MES 메인 창 handle 확인 실패. menu='{menuName}', attempt={attempt}");
+            return false;
+        }
+
+        for (var retry = 1; retry <= 3; retry++)
+        {
+            BringToFront(mainWindow);
+            await DelayAsync(150);
+
+            var foreground = GetForegroundWindow();
+            if (foreground == handle)
+            {
+                if (retry > 1)
+                {
+                    _logger.Info($"MES 메인 창 foreground 확보. menu='{menuName}', attempt={attempt}, retry={retry}");
+                }
+
+                return true;
+            }
+
+            var foregroundWindow = TryFromHandle(foreground);
+            var name = foregroundWindow is null ? "" : SafeRead(() => foregroundWindow.Current.Name) ?? "";
+            var processId = foregroundWindow is null ? null : SafeReadInt(() => foregroundWindow.Current.ProcessId);
+            var processName = GetProcessName(processId);
+            _logger.Warn($"MES 메인 창 foreground 대기. menu='{menuName}', attempt={attempt}, retry={retry}, foreground='{name}', process='{processName}'");
+        }
+
+        return false;
     }
 
     private async Task<bool> TrySetMenuSearchTextAsync(

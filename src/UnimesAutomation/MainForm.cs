@@ -15,6 +15,14 @@ public sealed class MainForm : Form
 
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
+    private const uint MbOk = 0x00000000;
+    private const uint MbIconError = 0x00000010;
+    private const uint MbTaskModal = 0x00002000;
+    private const uint MbSetForeground = 0x00010000;
+    private const uint MbTopMost = 0x00040000;
+
+    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int ShowNativeMessageBox(IntPtr hWnd, string text, string caption, uint type);
 
     private readonly RootConfig _config;
     private readonly RuntimePaths _paths;
@@ -404,6 +412,7 @@ public sealed class MainForm : Form
         catch (System.Exception ex)
         {
             _logger.Error(ex, "실행 실패");
+            ShowFailureDialog(ex);
         }
         finally
         {
@@ -411,6 +420,38 @@ public sealed class MainForm : Form
             _cts = null;
             SetRunning(false);
         }
+    }
+
+    private void ShowFailureDialog(System.Exception ex)
+    {
+        var reason = SummarizeFailure(ex);
+        var message =
+            "작업 실패" + System.Environment.NewLine +
+            System.Environment.NewLine +
+            $"원인: {reason}" + System.Environment.NewLine +
+            System.Environment.NewLine +
+            $"로그: {_paths.RunLogPath}";
+
+        try
+        {
+            ShowNativeMessageBox(IntPtr.Zero, message, "UNIMES 자동화 실패", MbOk | MbIconError | MbTaskModal | MbSetForeground | MbTopMost);
+        }
+        catch
+        {
+            MessageBox.Show(this, message, "UNIMES 자동화 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static string SummarizeFailure(System.Exception ex)
+    {
+        var message = ex.GetBaseException().Message;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            message = ex.GetType().Name;
+        }
+
+        message = Regex.Replace(message, @"\s+", " ").Trim();
+        return message.Length <= 180 ? message : message[..180] + "...";
     }
 
     private void RequestAbort()

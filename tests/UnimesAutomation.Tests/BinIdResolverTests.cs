@@ -8,6 +8,7 @@ public class BinIdResolverTests
     [InlineData("RMRD8G58A1P-GPWRRWM7", "RAM_Module_Normal_8GB")]  // 8G=8GB
     [InlineData("RMRDBG58A1P-GPWRRWM7", "RAM_Module_Normal_32GB")] // BG=32GB
     [InlineData("RMRDCG58A1P-GPWRRWM7", "RAM_Module_Normal_64GB")] // CG=64GB(미등록이어도 이름은 계산)
+    [InlineData("ZMRDAG58A1P-GPWRRWM7", "RAM_Module_Normal_16GB")] // ZM=Module, 이후 규칙 동일
     public void Module_resolves_capacity_only(string part, string expected)
     {
         var target = BinIdResolver.Resolve(part, "M050", "C010");
@@ -21,6 +22,8 @@ public class BinIdResolverTests
     [InlineData("RCA8G58A1P-XPWRRWM7", "DRAM_Comp_Bin_8Gb")]            // DDR4 8Gb
     [InlineData("RCAAG58A1P-XPWRRWM7", "DRAM_Comp_Bin_16Gb")]          // DDR4 16Gb
     [InlineData("RCRAH58A1P-XPWRRWM7", "DRAM_Comp_D5_XMP72_Bin_16Gb")] // DDR5 16Gb
+    [InlineData("ZCA8G485WD-5BGRX", "DRAM_Comp_Bin_8Gb")]              // ZC=Comp, 이후 규칙 동일
+    [InlineData("ZCAAG485WC-5BGRX", "DRAM_Comp_Bin_16Gb")]             // ZC=Comp, 이후 규칙 동일
     public void Comp_resolves_with_ddr(string part, string expected)
     {
         var target = BinIdResolver.Resolve(part, "M050", "C010");

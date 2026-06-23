@@ -13,8 +13,8 @@ public enum PartClass
 /// </summary>
 public static class PartClassifier
 {
-    private static readonly string[] ModulePrefixes = ["RM", "TM", "BM", "CM"];
-    private static readonly string[] CompPrefixes = ["RC", "TC", "BC", "CC"];
+    private static readonly string[] ModulePrefixes = ["RM", "TM", "BM", "CM", "ZM"];
+    private static readonly string[] CompPrefixes = ["RC", "TC", "BC", "CC", "ZC"];
 
     public static PartClass Classify(string partNo)
     {

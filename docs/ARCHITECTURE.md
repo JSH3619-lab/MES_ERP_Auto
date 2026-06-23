@@ -55,6 +55,8 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 파트별로 `품목명` 입력 후 조회하고, `PartClassifier` 결과에 따라 BIN 관리/TurnKey/AssemblyIn/불량창고 셀을 비교한다. 미존재 Part는 `[971001]품목 코드 이(가) 존재하지 않습니다.` 경고와 `고객사PartID PopUp`을 닫고 SKIPPED 처리한다.
 
+분류 prefix는 Module=`RM/TM/BM/CM/ZM`, Comp=`RC/TC/BC/CC/ZC`다. 이후 용량/BIN ID 계산 규칙은 기존 Module/Comp 규칙을 그대로 따른다.
+
 ## 품목별 BIN 정보 관리
 
 `BinIdResolver`가 Part No에서 Module/Comp, 공정 키, BIN ID 이름을 계산한다.
