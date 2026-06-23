@@ -312,6 +312,7 @@ public sealed class UnimesApp
 
                 SetElementText(partNameEdit, request.PartNo, "품목정보관리 품목명");
                 SendEnter(partNameEdit, "품목정보관리 품목명 조회");
+                var itemQueryStopwatch = Stopwatch.StartNew();
                 ThrowIfCancellationRequested("품목정보관리 품목명 입력");
 
                 if (await HandleOpenPartIdPopupAsync(request.PartNo))
@@ -361,6 +362,7 @@ public sealed class UnimesApp
                 }
 
                 _logger.Info($"품목정보관리 그리드 행 발견. part='{request.PartNo}', pid='{pid}'");
+                _logger.Info($"품목정보관리 조회 행 확인 완료. part='{request.PartNo}', elapsed={itemQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                 validParts.Add(request);
                 if (classification == PartClass.Unknown)
                 {
@@ -409,14 +411,14 @@ public sealed class UnimesApp
                     result.Status = "OK";
                     result.Saved = "UNCHANGED";
                     result.Message = "모든 값이 이미 일치 (변경 없음).";
-                    _logger.Info($"품목정보관리 no change. part='{request.PartNo}', pid='{pid}', class={classification}");
+                    _logger.Info($"품목정보관리 no change. part='{request.PartNo}', pid='{pid}', class={classification}, elapsed={itemQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                 }
                 else if (wouldCount > 0)
                 {
                     result.Status = "DRYRUN";
                     result.Saved = "NO";
                     result.Message = "변경 예정(저장 안 함): " + string.Join(", ", detail);
-                    _logger.Info($"품목정보관리 dryRun. part='{request.PartNo}', {result.Message}");
+                    _logger.Info($"품목정보관리 dryRun. part='{request.PartNo}', elapsed={itemQueryStopwatch.Elapsed.TotalSeconds:0.000}s, {result.Message}");
                 }
                 else if (SaveItemInfo(mainWindow))
                 {
@@ -425,7 +427,7 @@ public sealed class UnimesApp
                     result.Status = "OK";
                     result.Saved = "YES";
                     result.Message = "변경 저장: " + string.Join(", ", detail);
-                    _logger.Info($"품목정보관리 saved. part='{request.PartNo}', {result.Message}");
+                    _logger.Info($"품목정보관리 saved. part='{request.PartNo}', elapsed={itemQueryStopwatch.Elapsed.TotalSeconds:0.000}s, {result.Message}");
                 }
                 else
                 {
@@ -484,9 +486,10 @@ public sealed class UnimesApp
 
         var results = new List<BinResult>();
         var useProductLookup = _config.Workflow.RuntimeWorkScope == WorkScope.BinInfo;
+        var binControlsStopwatch = Stopwatch.StartNew();
         AutomationElement binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
         AutomationElement? partIdEdit = FindBinPartIdEdit(binWindow);
-        _logger.Info($"BIN stable controls cached. partIdEdit={partIdEdit is not null}, productLookup={useProductLookup}");
+        _logger.Info($"BIN stable controls cached. partIdEdit={partIdEdit is not null}, productLookup={useProductLookup}, elapsed={binControlsStopwatch.Elapsed.TotalSeconds:0.000}s");
 
         foreach (var request in requests)
         {
@@ -585,8 +588,10 @@ public sealed class UnimesApp
                 }
 
                 _logger.Info($"BIN 조회 실행. part='{request.PartNo}'");
+                var binQueryStopwatch = Stopwatch.StartNew();
                 await WaitForBinQuerySettledAsync(binWindow, request.PartNo, TimeSpan.FromMilliseconds(_config.Workflow.SearchDelayMilliseconds));
                 ThrowIfCancellationRequested("BIN 조회 대기");
+                _logger.Info($"BIN 조회 대기 완료. part='{request.PartNo}', elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
 
                 // 조회 결과가 없으면 '[900014]검색된 Data가 없습니다.' 모달이 뜬다.
                 // 모달이 떠 있는 동안 행 스캔/행추가가 막히므로, 뜨면 Enter로 먼저 닫는다.
@@ -597,10 +602,12 @@ public sealed class UnimesApp
                     binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                 }
 
+                var existingRowsStopwatch = Stopwatch.StartNew();
                 var existingRows = FindBinRowsForPart(binWindow, request.PartNo).Count;
+                _logger.Info($"BIN 기존 행 탐색 완료. part='{request.PartNo}', rows={existingRows}, elapsed={existingRowsStopwatch.Elapsed.TotalSeconds:0.000}s, queryElapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                 if (existingRows > 0)
                 {
-                    _logger.Info($"BIN 기존 등록 행 발견. 신규 행추가 없이 건너뜀. part='{request.PartNo}', rows={existingRows}");
+                    _logger.Info($"BIN 기존 등록 행 발견. 신규 행추가 없이 건너뜀. part='{request.PartNo}', rows={existingRows}, elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                     RecordResult("OK", "UNCHANGED", $"기존 BIN 등록 행 {existingRows}건 발견");
                     continue;
                 }
@@ -665,7 +672,7 @@ public sealed class UnimesApp
                     }
 
                     _screenshots.CaptureElement(binWindow, $"bin_after_save_{MakeSafeToken(request.PartNo)}");
-                    _logger.Info($"BIN saved. part='{request.PartNo}', binId='{target.BinIdName}'");
+                    _logger.Info($"BIN saved. part='{request.PartNo}', binId='{target.BinIdName}', elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                     RecordResult("OK", "YES", $"BIN 저장 완료. binId='{target.BinIdName}'");
                 }
                 else
@@ -1190,23 +1197,33 @@ public sealed class UnimesApp
     private async Task<AutomationElement?> InsertBinRowAsync(AutomationElement mainWindow, AutomationElement binWindow)
     {
         var before = CountBinInfoRows(binWindow);
-        if (ClickInsertRow(mainWindow))
+        var stopwatch = Stopwatch.StartNew();
+
+        if (TrySendBinInsertShortcut(binWindow, mainWindow))
         {
             var row = await WaitForNewBinRowAsync(binWindow, before, TimeSpan.FromMilliseconds(1200));
             if (row is not null)
             {
+                _logger.Info($"BIN 행추가 Ctrl+Insert 성공. elapsed={stopwatch.Elapsed.TotalSeconds:0.000}s");
                 return row;
             }
 
-            _logger.Warn("BIN 행추가 버튼 클릭 후 새 행 미감지. Ctrl+Insert fallback 사용.");
+            _logger.Warn($"BIN 행추가 Ctrl+Insert 후 새 행 미감지. 버튼 fallback 사용. elapsed={stopwatch.Elapsed.TotalSeconds:0.000}s");
         }
 
-        if (!TrySendBinInsertShortcut(binWindow, mainWindow))
+        if (ClickInsertRow(mainWindow))
         {
-            return null;
+            var row = await WaitForNewBinRowAsync(binWindow, before, TimeSpan.FromMilliseconds(2000));
+            if (row is not null)
+            {
+                _logger.Info($"BIN 행추가 버튼 fallback 성공. elapsed={stopwatch.Elapsed.TotalSeconds:0.000}s");
+                return row;
+            }
+
+            _logger.Warn($"BIN 행추가 버튼 fallback 후 새 행 미감지. elapsed={stopwatch.Elapsed.TotalSeconds:0.000}s");
         }
 
-        return await WaitForNewBinRowAsync(binWindow, before, TimeSpan.FromMilliseconds(2000));
+        return null;
     }
 
     private bool ClickInsertRow(AutomationElement mainWindow)
@@ -1222,7 +1239,7 @@ public sealed class UnimesApp
             return true;
         }
 
-        return TrySendBinInsertShortcut(null, mainWindow);
+        return false;
     }
 
     private bool TrySendBinInsertShortcut(AutomationElement? binWindow, AutomationElement mainWindow)
@@ -1823,6 +1840,7 @@ public sealed class UnimesApp
         }
 
         _logger.Info($"Navigating to '{menuName}' via F3 menu search.");
+        var navigationStopwatch = Stopwatch.StartNew();
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             ThrowIfCancellationRequested($"'{menuName}' 메뉴 탐색");
@@ -1835,25 +1853,31 @@ public sealed class UnimesApp
                 continue;
             }
 
-            var menuSearchButton = FindButtonByAutomationIdContains(mainWindow, "Tool : GoSearch")
-                ?? FindButtonByAnyName(mainWindow, ["메뉴찾기"]);
-            if (menuSearchButton is not null)
-            {
-                ClickElement(menuSearchButton, "menu search");
-                _logger.Info($"메뉴찾기 버튼 클릭. attempt={attempt}");
-            }
-            else
-            {
-                SendKeys.SendWait("{F3}");
-                _logger.Info($"F3 메뉴찾기 입력. attempt={attempt}");
-            }
+            AutomationElement? menuSearchButton = null;
+            SendKeys.SendWait("{F3}");
+            _logger.Info($"F3 메뉴찾기 입력. attempt={attempt}, elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
 
             await DelayAsync(150);
             LogFocusedElement(mainWindow, $"메뉴찾기 동작 직후. menu='{menuName}', attempt={attempt}");
 
-            if (await TrySetMenuSearchTextAsync(mainWindow, menuSearchButton, menuName, attempt))
+            var menuTextSet = await TrySetMenuSearchTextAsync(mainWindow, menuSearchButton, menuName, attempt);
+            if (!menuTextSet)
             {
-                _logger.Info($"메뉴찾기 입력칸 직접 활성화. menu='{menuName}', attempt={attempt}");
+                menuSearchButton = FindButtonByAutomationIdContains(mainWindow, "Tool : GoSearch")
+                    ?? FindButtonByAnyName(mainWindow, ["메뉴찾기"]);
+                if (menuSearchButton is not null)
+                {
+                    ClickElement(menuSearchButton, "menu search");
+                    _logger.Info($"F3 실패 후 메뉴찾기 버튼 클릭. attempt={attempt}, elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
+                    await DelayAsync(150);
+                    LogFocusedElement(mainWindow, $"메뉴찾기 버튼 클릭 직후. menu='{menuName}', attempt={attempt}");
+                    menuTextSet = await TrySetMenuSearchTextAsync(mainWindow, menuSearchButton, menuName, attempt);
+                }
+            }
+
+            if (menuTextSet)
+            {
+                _logger.Info($"메뉴찾기 입력칸 직접 활성화. menu='{menuName}', attempt={attempt}, elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
             }
             else
             {
@@ -1867,7 +1891,7 @@ public sealed class UnimesApp
 
             if (await WaitForMenuScreenAsync(mainWindow, menuName, TimeSpan.FromSeconds(1)))
             {
-                _logger.Info($"{menuName} screen confirmed.");
+                _logger.Info($"{menuName} screen confirmed. elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
                 return;
             }
 
@@ -1876,7 +1900,7 @@ public sealed class UnimesApp
                 _logger.Info($"메뉴찾기 [가기] 버튼 클릭. menu='{menuName}', attempt={attempt}");
                 if (await WaitForMenuScreenAsync(mainWindow, menuName, TimeSpan.FromSeconds(2)))
                 {
-                    _logger.Info($"{menuName} screen confirmed.");
+                    _logger.Info($"{menuName} screen confirmed. elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
                     return;
                 }
             }
@@ -1889,7 +1913,7 @@ public sealed class UnimesApp
                 _logger.Info($"트리 메뉴 직접 더블클릭. menu='{menuName}', attempt={attempt}");
                 if (await WaitForMenuScreenAsync(mainWindow, menuName, TimeSpan.FromSeconds(2)))
                 {
-                    _logger.Info($"{menuName} screen confirmed by tree menu.");
+                    _logger.Info($"{menuName} screen confirmed by tree menu. elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
                     return;
                 }
             }
@@ -1902,7 +1926,7 @@ public sealed class UnimesApp
             throw new InvalidOperationException($"{menuName} 화면 진입을 확인하지 못했습니다. Home Page 등 다른 화면에서 입력하지 않도록 중단합니다.");
         }
 
-        _logger.Info($"{menuName} screen confirmed.");
+        _logger.Info($"{menuName} screen confirmed. elapsed={navigationStopwatch.Elapsed.TotalSeconds:0.000}s");
     }
 
     private async Task<bool> EnsureMainWindowForegroundAsync(AutomationElement mainWindow, string menuName, int attempt)

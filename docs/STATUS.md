@@ -34,6 +34,9 @@
 - 품목정보관리 처리 후 BIN 정보 관리로 넘어갈 때 F3가 품목정보관리 그리드에 먹히는 경우를 보완했다.
   - focused element가 writable `Edit`이 아니면 `Home Page` 탭으로 포커스를 빼고 F3 메뉴찾기를 한 번 재시도한다.
   - 메뉴찾기 입력칸 위치 판정 범위를 실제 `txt` 입력칸 높이에 맞춰 조금 넓혔다.
+- 메뉴 이동은 F3를 우선 사용하고, 실패할 때만 메뉴찾기 버튼 탐색/클릭 fallback을 사용한다.
+- BIN 행추가는 `Ctrl+Insert`를 우선 사용하고, 새 행이 감지되지 않을 때만 행추가 버튼 클릭 fallback을 사용한다.
+- 다음 실기 로그 분석을 위해 메뉴 이동, 품목 조회 판단, BIN 컨트롤 캐시, BIN 조회/행탐색/저장에 elapsed 로그를 남긴다.
 - README와 운영 문서를 현재 기준으로 정리했다.
 
 ## 검증 상태
@@ -85,6 +88,8 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
   - 새 실기 로그에서 `FocusedElement` 라인을 확인한다.
   - `insideMain=True, writableEdit=True`이면 focused Edit 경로로 메뉴명이 입력되는지 확인한다.
   - `writableEdit=False`이면 `Home Page 탭 전환 후 F3 메뉴찾기 재입력` 로그가 나온 뒤 BIN 정보 관리 화면 진입 여부를 확인한다.
+  - BIN 행추가에서 `BIN 행추가 Ctrl+Insert 성공`이 먼저 나오는지 확인한다. 실패 시에만 버튼 fallback 로그가 나와야 한다.
+  - `elapsed=` 로그 기준으로 5초 이상 구간만 다음 최적화 대상으로 본다.
 
 ## 주의점
 
