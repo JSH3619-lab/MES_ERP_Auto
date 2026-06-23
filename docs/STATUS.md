@@ -28,6 +28,12 @@
   - `ZM`은 기존 Module 규칙과 동일하게 처리한다.
 - F3 메뉴 이동 시 MES 메인 창 foreground를 확인하고, 메뉴찾기 입력칸을 찾지 못하면 메뉴명 SendKeys fallback을 생략한다.
   - 목적: Home Page나 기존 업무 화면에 메뉴명을 잘못 입력하지 않기 위함.
+- F3 또는 메뉴찾기 버튼 동작 직후 `AutomationElement.FocusedElement`를 로그에 남긴다.
+- 메뉴찾기 입력칸 후보를 찾지 못한 경우, focused element가 MES 메인 창 내부의 writable `Edit`일 때만 메뉴명을 직접 설정한다.
+  - focused element가 입력칸이 아니면 blind SendKeys 없이 실패 처리한다.
+- 품목정보관리 처리 후 BIN 정보 관리로 넘어갈 때 F3가 품목정보관리 그리드에 먹히는 경우를 보완했다.
+  - focused element가 writable `Edit`이 아니면 `Home Page` 탭으로 포커스를 빼고 F3 메뉴찾기를 한 번 재시도한다.
+  - 메뉴찾기 입력칸 위치 판정 범위를 실제 `txt` 입력칸 높이에 맞춰 조금 넓혔다.
 - README와 운영 문서를 현재 기준으로 정리했다.
 
 ## 검증 상태
@@ -65,22 +71,20 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 코드는 현재 동작 기준으로 크게 흔들지 않는다. 이후 작업은 디자인 요소와 세부 동작 시간만 실기 로그 기준으로 좁게 조정한다.
 
-다음 세션에서 먼저 볼 항목:
+다음 실기 테스트에서 먼저 볼 항목:
 
 - 최신 실기 로그: `logs/run_20260623_153353.log`
 - 관련 캡처:
   - `screenshots/20260623_153440_934_menu_search_input_not_found_attempt_1.png`
   - `screenshots/20260623_153447_714_menu_search_input_not_found_attempt_2.png`
   - `screenshots/20260623_153454_463_menu_search_input_not_found_attempt_3.png`
-- 현재 실패 지점:
+- 직전 실패 지점:
   - F3 입력 후 `품목정보관리` 화면 진입 전, 메뉴찾기 입력칸을 찾지 못해 중단.
   - 캡처상 우측 상단 검색 입력칸이 아니라 좌측 메뉴 패널의 `기준정보` 영역에 선택/포커스가 잡힌 것으로 보인다.
-  - 현재 로그에는 실제 focused element 정보가 남지 않으므로 다음 수정에서 먼저 보강해야 한다.
-- 권장 수정 방향:
-  - F3 또는 메뉴찾기 버튼 클릭 직후 `AutomationElement.FocusedElement`를 로그에 남긴다.
-  - focused element가 MES 메인 창 내부의 writable `Edit`이면 그 입력칸에 메뉴명을 직접 설정한다.
-  - focused element가 `Edit`이 아니면 메뉴명을 blind SendKeys로 치지 않고 실패 처리한다.
-  - 실패 로그에는 focused element 설명과 스크린샷을 같이 남긴다.
+- 다음 확인 포인트:
+  - 새 실기 로그에서 `FocusedElement` 라인을 확인한다.
+  - `insideMain=True, writableEdit=True`이면 focused Edit 경로로 메뉴명이 입력되는지 확인한다.
+  - `writableEdit=False`이면 `Home Page 탭 전환 후 F3 메뉴찾기 재입력` 로그가 나온 뒤 BIN 정보 관리 화면 진입 여부를 확인한다.
 
 ## 주의점
 

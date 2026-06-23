@@ -1848,6 +1848,9 @@ public sealed class UnimesApp
                 _logger.Info($"F3 메뉴찾기 입력. attempt={attempt}");
             }
 
+            await DelayAsync(150);
+            LogFocusedElement(mainWindow, $"메뉴찾기 동작 직후. menu='{menuName}', attempt={attempt}");
+
             if (await TrySetMenuSearchTextAsync(mainWindow, menuSearchButton, menuName, attempt))
             {
                 _logger.Info($"메뉴찾기 입력칸 직접 활성화. menu='{menuName}', attempt={attempt}");
@@ -1946,6 +1949,25 @@ public sealed class UnimesApp
         var input = await WaitForMenuSearchInputAsync(mainWindow, menuSearchButton, TimeSpan.FromMilliseconds(700));
         if (input is null)
         {
+            input = TryUseFocusedMenuSearchEdit(mainWindow, menuName, attempt, "메뉴찾기 입력칸 후보 미발견");
+        }
+
+        if (input is null && TryActivateHomePageTab(mainWindow))
+        {
+            await DelayAsync(150);
+            SendKeys.SendWait("{F3}");
+            _logger.Info($"Home Page 탭 전환 후 F3 메뉴찾기 재입력. menu='{menuName}', attempt={attempt}");
+            await DelayAsync(150);
+            LogFocusedElement(mainWindow, $"Home Page 전환 후 메뉴찾기 동작 직후. menu='{menuName}', attempt={attempt}");
+            input = await WaitForMenuSearchInputAsync(mainWindow, menuSearchButton, TimeSpan.FromMilliseconds(700));
+            if (input is null)
+            {
+                input = TryUseFocusedMenuSearchEdit(mainWindow, menuName, attempt, "Home Page 전환 후 메뉴찾기 입력칸 후보 미발견");
+            }
+        }
+
+        if (input is null)
+        {
             return false;
         }
 
@@ -1978,6 +2000,147 @@ public sealed class UnimesApp
         SendKeys.SendWait("{BACKSPACE}");
         SendKeys.SendWait(EscapeForSendKeys(menuName));
         return true;
+    }
+
+    private AutomationElement? TryUseFocusedMenuSearchEdit(AutomationElement mainWindow, string menuName, int attempt, string context)
+    {
+        var focused = LogFocusedElement(mainWindow, $"{context}. menu='{menuName}', attempt={attempt}");
+        if (!IsWritableEditInside(mainWindow, focused))
+        {
+            return null;
+        }
+
+        _logger.Info($"메뉴찾기 focused Edit 사용. menu='{menuName}', attempt={attempt}, input={DescribeElementForLog(focused)}");
+        return focused;
+    }
+
+    private bool TryActivateHomePageTab(AutomationElement mainWindow)
+    {
+        var tab = FindDescendants(mainWindow, ControlType.TabItem)
+            .Select(element => new
+            {
+                Element = element,
+                Name = SafeRead(() => element.Current.Name) ?? "",
+                Rect = SafeReadRect(() => element.Current.BoundingRectangle),
+                Enabled = SafeRead(() => element.Current.IsEnabled),
+                Offscreen = SafeRead(() => element.Current.IsOffscreen)
+            })
+            .Where(candidate => string.Equals(candidate.Name, "Home Page", StringComparison.OrdinalIgnoreCase) &&
+                                candidate.Rect.HasValue &&
+                                !candidate.Rect.Value.IsEmpty &&
+                                candidate.Enabled &&
+                                !candidate.Offscreen)
+            .OrderBy(candidate => candidate.Rect!.Value.Top)
+            .ThenBy(candidate => candidate.Rect!.Value.Left)
+            .FirstOrDefault()?.Element;
+
+        if (tab is null)
+        {
+            _logger.Warn("Home Page 탭을 찾지 못해 메뉴찾기 포커스 복구를 생략합니다.");
+            return false;
+        }
+
+        BringToFront(mainWindow);
+        if (tab.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var rawPattern) &&
+            rawPattern is SelectionItemPattern selectionItemPattern)
+        {
+            try
+            {
+                selectionItemPattern.Select();
+                _logger.Info("Home Page 탭 선택으로 메뉴찾기 포커스 복구 시도.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Home Page 탭 SelectionItemPattern 실패. 좌표 클릭 fallback 사용. reason={ex.Message}");
+            }
+        }
+
+        try
+        {
+            ClickElementCenterByMouse(tab);
+            _logger.Info("Home Page 탭 클릭으로 메뉴찾기 포커스 복구 시도.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Home Page 탭 클릭 실패. reason={ex.Message}");
+            return false;
+        }
+    }
+
+    private AutomationElement? LogFocusedElement(AutomationElement mainWindow, string context)
+    {
+        var focused = TryGetFocusedElement();
+        var insideMain = focused is not null && IsInsideElement(mainWindow, focused);
+        var writableEdit = IsWritableEdit(focused);
+        _logger.Info($"{context} FocusedElement: insideMain={insideMain}, writableEdit={writableEdit}, {DescribeElementForLog(focused)}");
+        return focused;
+    }
+
+    private static AutomationElement? TryGetFocusedElement()
+    {
+        try
+        {
+            return AutomationElement.FocusedElement;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsWritableEditInside(AutomationElement mainWindow, AutomationElement? element)
+    {
+        return element is not null &&
+               IsInsideElement(mainWindow, element) &&
+               IsWritableEdit(element);
+    }
+
+    private static bool IsWritableEdit(AutomationElement? element)
+    {
+        if (element is null)
+        {
+            return false;
+        }
+
+        var controlType = SafeRead(() => element.Current.ControlType);
+        return controlType == ControlType.Edit && IsWritableValueControl(element);
+    }
+
+    private static bool IsInsideElement(AutomationElement root, AutomationElement element)
+    {
+        try
+        {
+            if (Automation.Compare(root, element))
+            {
+                return true;
+            }
+
+            var walker = TreeWalker.ControlViewWalker;
+            var current = element;
+            while (current is not null)
+            {
+                var parent = walker.GetParent(current);
+                if (parent is null)
+                {
+                    return false;
+                }
+
+                if (Automation.Compare(root, parent))
+                {
+                    return true;
+                }
+
+                current = parent;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private async Task<AutomationElement?> WaitForMenuSearchInputAsync(
@@ -2033,7 +2196,7 @@ public sealed class UnimesApp
         System.Windows.Rect? menuSearchButtonRect)
     {
         var inTopRightPanel = rect.Top >= mainRect.Top &&
-                              rect.Bottom <= mainRect.Top + 140 &&
+                              rect.Bottom <= mainRect.Top + 180 &&
                               rect.Left >= mainRect.Right - 430;
         if (inTopRightPanel)
         {
