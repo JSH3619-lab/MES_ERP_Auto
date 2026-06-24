@@ -387,6 +387,13 @@ public sealed class UnimesApp
                     ("불량창고", result.DefectWarehouse)
                 })
                 {
+                    // SSD는 조립입고 공정이동여부를 설정값과 무관하게 절대 건드리지 않는다.
+                    if (classification == PartClass.Ssd && column == "조립입고 공정이동여부")
+                    {
+                        _logger.Info($"품목정보관리 SSD 조립입고 미처리(고정). part='{request.PartNo}'");
+                        continue;
+                    }
+
                     if (string.IsNullOrWhiteSpace(value))
                     {
                         _logger.Info($"품목정보관리 셀 비교 제외. part='{request.PartNo}', column='{column}'");
@@ -2628,8 +2635,31 @@ public sealed class UnimesApp
             _logger.Warn($"Combo expand (keyboard) failed. column='{columnName}', reason={ex.Message}");
         }
 
+        // ExpandCollapse가 cold 상태(편집모드 아님)로 던지면 드롭다운이 안 열린다.
+        // 직전 인접 셀을 건너뛴 경우(예: SSD 불량창고)에 발생하므로, 드롭다운 버튼을 좌표 클릭해 강제로 연다.
+        if (TryOpenComboByClick(combo, columnName))
+        {
+            return;
+        }
+
         SendKeys.SendWait("%{DOWN}");
         Thread.Sleep(200);
+    }
+
+    private bool TryOpenComboByClick(AutomationElement combo, string columnName)
+    {
+        var rect = SafeReadRect(() => combo.Current.BoundingRectangle);
+        if (rect is null || rect.Value.IsEmpty)
+        {
+            return false;
+        }
+
+        TryFocus(combo, $"grid cell '{columnName}'");
+        Cursor.Position = new System.Drawing.Point((int)(rect.Value.Right - 8), (int)(rect.Value.Top + rect.Value.Height / 2));
+        MouseClick();
+        Thread.Sleep(250);
+        _logger.Info($"콤보 드롭다운 좌표 클릭으로 강제 확장. column='{columnName}'");
+        return true;
     }
 
     private static bool IsListItemSelected(AutomationElement item)
