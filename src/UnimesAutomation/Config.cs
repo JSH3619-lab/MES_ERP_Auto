@@ -1,0 +1,283 @@
+using System.Text.Json.Serialization;
+
+namespace UnimesAutomation;
+
+public enum WorkScope
+{
+    ItemInfo,
+    BinInfo,
+    Both
+}
+
+public sealed class RootConfig
+{
+    [JsonPropertyName("app")]
+    public AppConfig App { get; set; } = new();
+
+    [JsonPropertyName("login")]
+    public LoginConfig Login { get; set; } = new();
+
+    [JsonPropertyName("safety")]
+    public SafetyConfig Safety { get; set; } = new();
+
+    [JsonPropertyName("workflow")]
+    public WorkflowConfig Workflow { get; set; } = new();
+
+    [JsonPropertyName("options")]
+    public OptionsConfig Options { get; set; } = new();
+
+    [JsonPropertyName("categories")]
+    public CategoriesConfig Categories { get; set; } = new();
+
+    [JsonPropertyName("global")]
+    public GlobalConfig Global { get; set; } = new();
+
+    public ItemInfoValues? ResolveItemInfo(PartClass cls) => cls switch
+    {
+        PartClass.Module => Categories.DramModule.ItemInfo,
+        PartClass.Comp => Categories.DramComp.ItemInfo,
+        PartClass.Ssd => Categories.Ssd.ItemInfo,
+        _ => null
+    };
+
+    public static RootConfig CreateDefault()
+    {
+        return new RootConfig
+        {
+            App = new AppConfig
+            {
+                LaunchPath = @"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Bizentro\UNIMES - 1 .appref-ms",
+                WindowTitleContains = ["UNIMES"],
+                WindowTitleExcludes = ["UNIERP"],
+                ProcessNameHints = ["UNIMES", "SetupMES", "Bizentro.App.MAIN.ClientAgent", "Bizentro.App.MAIN.Shell"],
+                LaunchTimeoutSeconds = 90,
+                LoginTimeoutSeconds = 180,
+                UiDumpMaxDepth = 12
+            },
+            Login = new LoginConfig
+            {
+                UserId = "22402002",
+                PasswordMode = "env",
+                Password = "",
+                UserIdEnvironmentVariable = "UNIMES_USER_ID",
+                PasswordEnvironmentVariable = "UNIMES_PASSWORD",
+                Language = "한국어",
+                System = "UNIMES"
+            },
+            Safety = new SafetyConfig
+            {
+                DryRun = true,
+                SaveEnabled = false
+            },
+            Workflow = new WorkflowConfig
+            {
+                Enabled = true,
+                InputPartsPath = "input_parts.csv",
+                SearchDelayMilliseconds = 900,
+                StopOnFirstFailure = false
+            },
+            Options = new OptionsConfig(),
+            Categories = new CategoriesConfig(),
+            Global = new GlobalConfig()
+        };
+    }
+}
+
+public sealed class AppConfig
+{
+    [JsonPropertyName("launchPath")]
+    public string LaunchPath { get; set; } = "";
+
+    [JsonPropertyName("windowTitleContains")]
+    public List<string> WindowTitleContains { get; set; } = ["UNIMES"];
+
+    // 제목에 이 토큰이 포함된 창은 대상에서 제외(예: 같은 플랫폼의 ERP 창).
+    [JsonPropertyName("windowTitleExcludes")]
+    public List<string> WindowTitleExcludes { get; set; } = [];
+
+    [JsonPropertyName("processNameHints")]
+    public List<string> ProcessNameHints { get; set; } = [];
+
+    [JsonPropertyName("launchTimeoutSeconds")]
+    public int LaunchTimeoutSeconds { get; set; } = 90;
+
+    [JsonPropertyName("loginTimeoutSeconds")]
+    public int LoginTimeoutSeconds { get; set; } = 180;
+
+    [JsonPropertyName("uiDumpMaxDepth")]
+    public int UiDumpMaxDepth { get; set; } = 12;
+
+    // "attachOrLaunch"(기본): 로그인된 UNIMES 있으면 붙고 없으면 실행
+    // "attach": 로그인된 창에만 붙음(없으면 에러). "launch": 항상 새로 실행.
+    [JsonPropertyName("launchMode")]
+    public string LaunchMode { get; set; } = "attachOrLaunch";
+}
+
+public sealed class LoginConfig
+{
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = "";
+
+    [JsonPropertyName("passwordMode")]
+    public string PasswordMode { get; set; } = "manual";
+
+    [JsonPropertyName("password")]
+    public string Password { get; set; } = "";
+
+    [JsonPropertyName("passwordEncrypted")]
+    public string PasswordEncrypted { get; set; } = "";
+
+    [JsonIgnore]
+    public bool UseDpapiPassword =>
+        string.Equals(PasswordMode, "dpapi", StringComparison.OrdinalIgnoreCase);
+
+    [JsonPropertyName("userIdEnvironmentVariable")]
+    public string UserIdEnvironmentVariable { get; set; } = "UNIMES_USER_ID";
+
+    [JsonPropertyName("passwordEnvironmentVariable")]
+    public string PasswordEnvironmentVariable { get; set; } = "UNIMES_PASSWORD";
+
+    [JsonPropertyName("language")]
+    public string Language { get; set; } = "한국어";
+
+    [JsonPropertyName("system")]
+    public string System { get; set; } = "UNIMES";
+
+    [JsonIgnore]
+    public bool UseConfigPassword => string.Equals(PasswordMode, "config", StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed class SafetyConfig
+{
+    [JsonPropertyName("dryRun")]
+    public bool DryRun { get; set; } = true;
+
+    [JsonPropertyName("saveEnabled")]
+    public bool SaveEnabled { get; set; }
+}
+
+public sealed class WorkflowConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [JsonPropertyName("inputPartsPath")]
+    public string InputPartsPath { get; set; } = "input_parts.csv";
+
+    [JsonPropertyName("searchDelayMilliseconds")]
+    public int SearchDelayMilliseconds { get; set; } = 900;
+
+    [JsonPropertyName("stopOnFirstFailure")]
+    public bool StopOnFirstFailure { get; set; } = false;
+
+    [JsonPropertyName("showCompletionDialog")]
+    public bool ShowCompletionDialog { get; set; } = true;
+
+    [JsonIgnore]
+    public WorkScope RuntimeWorkScope { get; set; } = WorkScope.ItemInfo;
+
+    [JsonIgnore]
+    public List<PartRequest> RuntimePartRequests { get; set; } = [];
+}
+
+public sealed class OptionsConfig
+{
+    [JsonPropertyName("defectWarehouses")]
+    public List<string> DefectWarehouses { get; set; } = ["제품 폐기창고", "COMPONENT 폐기창고"];
+
+    [JsonPropertyName("binTypes")]
+    public List<string> BinTypes { get; set; } = ["Normal-1", "Normal-2", "Special-1"];
+
+    [JsonPropertyName("retestThs")]
+    public List<string> RetestThs { get; set; } = ["H", "Normal", "L"];
+
+    [JsonPropertyName("binCompletes")]
+    public List<string> BinCompletes { get; set; } = ["Y", "N"];
+}
+
+public sealed class CategoriesConfig
+{
+    [JsonPropertyName("dramModule")]
+    public CategoryConfig DramModule { get; set; } = CategoryConfig.DefaultModule();
+
+    [JsonPropertyName("dramComp")]
+    public CategoryConfig DramComp { get; set; } = CategoryConfig.DefaultComp();
+
+    [JsonPropertyName("ssd")]
+    public SsdCategoryConfig Ssd { get; set; } = SsdCategoryConfig.Default();
+}
+
+public sealed class CategoryConfig
+{
+    [JsonPropertyName("itemInfo")]
+    public ItemInfoValues ItemInfo { get; set; } = new();
+
+    [JsonPropertyName("binInfo")]
+    public BinInfoValues BinInfo { get; set; } = new();
+
+    public static CategoryConfig DefaultModule() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "제품 폐기창고" },
+        BinInfo = new BinInfoValues { ProcessSearchKey = "M050", Rows = [BinRowConfig.Default("M050")] }
+    };
+
+    public static CategoryConfig DefaultComp() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "COMPONENT 폐기창고" },
+        BinInfo = new BinInfoValues { ProcessSearchKey = "C010", Rows = [BinRowConfig.Default("C010")] }
+    };
+}
+
+public sealed class SsdCategoryConfig
+{
+    [JsonPropertyName("itemInfo")]
+    public ItemInfoValues ItemInfo { get; set; } = new();
+
+    [JsonPropertyName("b0BinInfo")]
+    public BinInfoValues B0BinInfo { get; set; } = new();
+
+    [JsonPropertyName("r0BinInfo")]
+    public BinInfoValues R0BinInfo { get; set; } = new();
+
+    public static SsdCategoryConfig Default() => new()
+    {
+        ItemInfo = new ItemInfoValues
+        {
+            BinManage = "Y",
+            TurnKey = "N",
+            AssemblyIn = "",
+            DefectWarehouse = "제품 폐기창고"
+        },
+        B0BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M020",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "0", BinComplete = "N", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "1", BinComplete = "Y", RetestTh = "Normal" }
+            ]
+        },
+        R0BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M020",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "0", BinComplete = "N", RetestTh = "H" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-2", RetestNo = "1", BinComplete = "N", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Special-1", RetestNo = "2", BinComplete = "Y", RetestTh = "Normal" }
+            ]
+        }
+    };
+}
+
+public sealed class GlobalConfig
+{
+    [JsonPropertyName("recoveryPart")]
+    public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
+
+    [JsonPropertyName("itemInfoMenuName")]
+    public string ItemInfoMenuName { get; set; } = "품목정보관리";
+
+    [JsonPropertyName("binInfoMenuName")]
+    public string BinInfoMenuName { get; set; } = "품목별 BIN 정보 관리";
+}
