@@ -32,10 +32,11 @@ public sealed class RootConfig
     [JsonPropertyName("global")]
     public GlobalConfig Global { get; set; } = new();
 
-    public CategoryConfig? ResolveCategory(PartClass cls) => cls switch
+    public ItemInfoValues? ResolveItemInfo(PartClass cls) => cls switch
     {
-        PartClass.Module => Categories.DramModule,
-        PartClass.Comp => Categories.DramComp,
+        PartClass.Module => Categories.DramModule.ItemInfo,
+        PartClass.Comp => Categories.DramComp.ItemInfo,
+        PartClass.Ssd => Categories.Ssd.ItemInfo,
         _ => null
     };
 
@@ -185,10 +186,10 @@ public sealed class OptionsConfig
     public List<string> DefectWarehouses { get; set; } = ["제품 폐기창고", "COMPONENT 폐기창고"];
 
     [JsonPropertyName("binTypes")]
-    public List<string> BinTypes { get; set; } = ["Normal-1"];
+    public List<string> BinTypes { get; set; } = ["Normal-1", "Normal-2", "Special-1"];
 
     [JsonPropertyName("retestThs")]
-    public List<string> RetestThs { get; set; } = ["H", "L"];
+    public List<string> RetestThs { get; set; } = ["H", "Normal", "L"];
 
     [JsonPropertyName("binCompletes")]
     public List<string> BinCompletes { get; set; } = ["Y", "N"];
@@ -201,6 +202,9 @@ public sealed class CategoriesConfig
 
     [JsonPropertyName("dramComp")]
     public CategoryConfig DramComp { get; set; } = CategoryConfig.DefaultComp();
+
+    [JsonPropertyName("ssd")]
+    public SsdCategoryConfig Ssd { get; set; } = SsdCategoryConfig.Default();
 }
 
 public sealed class CategoryConfig
@@ -221,6 +225,48 @@ public sealed class CategoryConfig
     {
         ItemInfo = new ItemInfoValues { DefectWarehouse = "COMPONENT 폐기창고" },
         BinInfo = new BinInfoValues { ProcessSearchKey = "C010", Rows = [BinRowConfig.Default("C010")] }
+    };
+}
+
+public sealed class SsdCategoryConfig
+{
+    [JsonPropertyName("itemInfo")]
+    public ItemInfoValues ItemInfo { get; set; } = new();
+
+    [JsonPropertyName("b0BinInfo")]
+    public BinInfoValues B0BinInfo { get; set; } = new();
+
+    [JsonPropertyName("r0BinInfo")]
+    public BinInfoValues R0BinInfo { get; set; } = new();
+
+    public static SsdCategoryConfig Default() => new()
+    {
+        ItemInfo = new ItemInfoValues
+        {
+            BinManage = "Y",
+            TurnKey = "N",
+            AssemblyIn = "",
+            DefectWarehouse = "제품 폐기창고"
+        },
+        B0BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M020",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "0", BinComplete = "N", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "1", BinComplete = "Y", RetestTh = "Normal" }
+            ]
+        },
+        R0BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M020",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-1", RetestNo = "0", BinComplete = "N", RetestTh = "H" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Normal-2", RetestNo = "1", BinComplete = "N", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M020", BinType = "Special-1", RetestNo = "2", BinComplete = "Y", RetestTh = "Normal" }
+            ]
+        }
     };
 }
 

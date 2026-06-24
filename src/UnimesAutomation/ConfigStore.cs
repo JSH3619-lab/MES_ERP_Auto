@@ -25,7 +25,7 @@ public static class ConfigStore
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            return RootConfig.CreateDefault();
+            return Normalize(RootConfig.CreateDefault());
         }
 
         var json = File.ReadAllText(path);
@@ -37,15 +37,15 @@ public static class ConfigStore
 
         if (node is null)
         {
-            return RootConfig.CreateDefault();
+            return Normalize(RootConfig.CreateDefault());
         }
 
         if (node["categories"] is not null)
         {
-            return node.Deserialize<RootConfig>(ReadOptions) ?? RootConfig.CreateDefault();
+            return Normalize(node.Deserialize<RootConfig>(ReadOptions) ?? RootConfig.CreateDefault());
         }
 
-        return MigrateLegacy(node);
+        return Normalize(MigrateLegacy(node));
     }
 
     public static void Save(string path, RootConfig config)
@@ -135,5 +135,26 @@ public static class ConfigStore
         };
 
         return cfg;
+    }
+
+    private static RootConfig Normalize(RootConfig cfg)
+    {
+        AddMissing(cfg.Options.DefectWarehouses, ["제품 폐기창고", "COMPONENT 폐기창고"]);
+        AddMissing(cfg.Options.BinTypes, ["Normal-1", "Normal-2", "Special-1"]);
+        AddMissing(cfg.Options.RetestThs, ["H", "Normal", "L"]);
+        AddMissing(cfg.Options.BinCompletes, ["Y", "N"]);
+        cfg.Categories.Ssd.ItemInfo.AssemblyIn = "";
+        return cfg;
+    }
+
+    private static void AddMissing(List<string> values, IEnumerable<string> required)
+    {
+        foreach (var value in required)
+        {
+            if (!values.Contains(value))
+            {
+                values.Add(value);
+            }
+        }
     }
 }

@@ -249,12 +249,8 @@ public sealed class UnimesApp
         {
             var partNo = requests[index].PartNo;
             var cls = PartClassifier.Classify(partNo);
-            var warehouse = cls switch
-            {
-                PartClass.Module => _config.Categories.DramModule.ItemInfo.DefectWarehouse,
-                PartClass.Comp => _config.Categories.DramComp.ItemInfo.DefectWarehouse,
-                _ => "(분류 실패 → 미존재 여부만 확인)"
-            };
+            var itemInfo = _config.ResolveItemInfo(cls);
+            var warehouse = itemInfo?.DefectWarehouse ?? "(분류 실패 → 미존재 여부만 확인)";
             _logger.Info($"  [{index + 1}/{requests.Count}] {partNo} → class={cls}, 불량창고={warehouse}");
         }
 
@@ -271,7 +267,7 @@ public sealed class UnimesApp
             ThrowIfCancellationRequested("품목정보관리 남은 Part 처리");
 
             var classification = PartClassifier.Classify(request.PartNo);
-            var categoryItem = (_config.ResolveCategory(classification)?.ItemInfo) ?? new ItemInfoValues();
+            var categoryItem = _config.ResolveItemInfo(classification) ?? new ItemInfoValues();
 
             var result = new PartResult
             {
@@ -370,7 +366,7 @@ public sealed class UnimesApp
                     _screenshots.CaptureElement(itemInfoWindow, $"classification_failed_{request.PartNo}");
                     result.Status = "SKIPPED";
                     result.Saved = "NO";
-                    result.Message = "Part exists, but prefix is neither Module(RM/TM/BM/CM) nor Comp(RC/TC/BC/CC).";
+                    result.Message = "Part exists, but prefix is neither DRAM Module/Comp nor SSD(DA/DE).";
                     results.Add(result);
                     if (_config.Workflow.StopOnFirstFailure) break;
                     continue;
@@ -391,6 +387,12 @@ public sealed class UnimesApp
                     ("불량창고", result.DefectWarehouse)
                 })
                 {
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        _logger.Info($"품목정보관리 셀 비교 제외. part='{request.PartNo}', column='{column}'");
+                        continue;
+                    }
+
                     var action = ApplyComboCell(row, column, value, readOnlyMode);
                     if (action == CellAction.Changed)
                     {
@@ -497,24 +499,19 @@ public sealed class UnimesApp
 
             var resultRecorded = false;
             var cls = PartClassifier.Classify(request.PartNo);
-            var rowProcess = "";
-            var rowBinType = "";
-            var rowRetestNo = "";
-            var rowBinComplete = "";
-            var rowRetestTh = "";
-            var rowBinId = "";
-            void RecordResult(string status, string saved, string message)
+            void RecordResult(BinInfoRowTarget? rowTarget, string status, string saved, string message)
             {
+                var rowConfig = rowTarget?.Row;
                 results.Add(new BinResult
                 {
                     PartNo = request.PartNo,
                     Classification = cls.ToString(),
-                    ProcessName = rowProcess,
-                    BinType = rowBinType,
-                    RetestNo = rowRetestNo,
-                    BinComplete = rowBinComplete,
-                    RetestTh = rowRetestTh,
-                    BinId = rowBinId,
+                    ProcessName = rowTarget?.ProcessSearchKey ?? "",
+                    BinType = rowConfig?.BinType ?? "",
+                    RetestNo = rowConfig?.RetestNo ?? "",
+                    BinComplete = rowConfig?.BinComplete ?? "",
+                    RetestTh = rowConfig?.RetestTh ?? "",
+                    BinId = rowTarget?.BinIdName ?? "",
                     Saved = saved,
                     Status = status,
                     Message = message,
@@ -529,16 +526,13 @@ public sealed class UnimesApp
                 BringToFront(mainWindow);
                 ThrowIfCancellationRequested("BIN Part 처리 시작");
 
-                var target = BinIdResolver.Resolve(request.PartNo, _config.Categories.DramModule.BinInfo.ProcessSearchKey, _config.Categories.DramComp.BinInfo.ProcessSearchKey);
+                var target = BinIdResolver.Resolve(request.PartNo, _config);
                 if (target is null)
                 {
                     _logger.Warn($"BIN 분류/용량 파싱 실패로 건너뜀. part='{request.PartNo}'");
-                    RecordResult("SKIPPED", "NO", "BIN 분류/용량 파싱 실패");
+                    RecordResult(null, "SKIPPED", "NO", "BIN 분류/용량 파싱 실패");
                     continue;
                 }
-
-                rowProcess = target.ProcessSearchKey;
-                rowBinId = target.BinIdName;
 
                 if (!IsElementUsable(binWindow))
                 {
@@ -554,7 +548,7 @@ public sealed class UnimesApp
                 {
                     _logger.Error($"BIN 품목 ID 입력칸 미발견. part='{request.PartNo}'");
                     _screenshots.CaptureElement(binWindow, $"bin_part_id_not_found_{MakeSafeToken(request.PartNo)}");
-                    RecordResult("ERROR", "NO", "BIN 품목 ID 입력칸 미발견");
+                    RecordResult(null, "ERROR", "NO", "BIN 품목 ID 입력칸 미발견");
                     continue;
                 }
 
@@ -563,7 +557,7 @@ public sealed class UnimesApp
                     if (!await SelectBinProductFromLookupAsync(binWindow, partIdEdit, request.PartNo))
                     {
                         _logger.Warn($"BIN 품목 코드 미존재로 건너뜀. part='{request.PartNo}'");
-                        RecordResult("SKIPPED", "NO", "BIN 품목 코드 미존재");
+                        RecordResult(null, "SKIPPED", "NO", "BIN 품목 코드 미존재");
                         continue;
                     }
                 }
@@ -605,10 +599,15 @@ public sealed class UnimesApp
                 var existingRowsStopwatch = Stopwatch.StartNew();
                 var existingRows = FindBinRowsForPart(binWindow, request.PartNo).Count;
                 _logger.Info($"BIN 기존 행 탐색 완료. part='{request.PartNo}', rows={existingRows}, elapsed={existingRowsStopwatch.Elapsed.TotalSeconds:0.000}s, queryElapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
-                if (existingRows > 0)
+                var existingTargetRows = Math.Min(existingRows, target.Rows.Count);
+                for (var i = 0; i < existingTargetRows; i++)
                 {
-                    _logger.Info($"BIN 기존 등록 행 발견. 신규 행추가 없이 건너뜀. part='{request.PartNo}', rows={existingRows}, elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
-                    RecordResult("OK", "UNCHANGED", $"기존 BIN 등록 행 {existingRows}건 발견");
+                    RecordResult(target.Rows[i], "OK", "UNCHANGED", $"기존 BIN 등록 행 {existingRows}건 발견");
+                }
+
+                if (existingRows >= target.Rows.Count)
+                {
+                    _logger.Info($"BIN 기존 등록 행 충분. 신규 행추가 없이 건너뜀. part='{request.PartNo}', rows={existingRows}, targetRows={target.Rows.Count}, elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
                     continue;
                 }
 
@@ -617,68 +616,84 @@ public sealed class UnimesApp
                     binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                 }
 
-                var row = await InsertBinRowAsync(mainWindow, binWindow);
-                if (row is null)
+                var stopPart = false;
+                for (var targetIndex = existingRows; targetIndex < target.Rows.Count; targetIndex++)
                 {
-                    _logger.Error($"BIN 추가 행 미발견. part='{request.PartNo}'");
-                    _screenshots.CaptureElement(binWindow, $"bin_new_row_not_found_{MakeSafeToken(request.PartNo)}");
-                    RecordResult("ERROR", "NO", "BIN 추가 행 미발견");
-                    continue;
-                }
+                    var rowTarget = target.Rows[targetIndex];
+                    var rowNo = targetIndex + 1;
+                    _logger.Info($"BIN 신규 행 처리 시작. part='{request.PartNo}', row={rowNo}/{target.Rows.Count}, process='{rowTarget.ProcessSearchKey}', binId='{rowTarget.BinIdName}'");
 
-                if (!await SelectProcessPopupAsync(row, target.ProcessSearchKey))
-                {
-                    _logger.Error($"BIN 공정명 입력 실패. part='{request.PartNo}', key='{target.ProcessSearchKey}'");
-                    RecordResult("ERROR", "NO", $"BIN 공정명 입력 실패. key='{target.ProcessSearchKey}'");
-                    continue;
-                }
-
-                if (!IsElementUsable(row))
-                {
-                    row = FindNewBinRow(binWindow);
-                }
-
-                if (row is null)
-                {
-                    _logger.Error($"BIN 공정명 선택 후 행 재탐색 실패. part='{request.PartNo}'");
-                    RecordResult("ERROR", "NO", "BIN 공정명 선택 후 행 재탐색 실패");
-                    continue;
-                }
-
-                // 실행은 분류별 첫 행만 적용한다. 모델/설정은 다중 행을 담을 수 있으나,
-                // 다중 행 실행은 라이브 검증이 가능한 Flash 도입 시점에 추가한다(스펙 §4).
-                var binRow = (_config.ResolveCategory(target.Class)?.BinInfo.Rows.FirstOrDefault()) ?? new BinRowConfig();
-                rowBinType = binRow.BinType;
-                rowRetestNo = binRow.RetestNo;
-                rowBinComplete = binRow.BinComplete;
-                rowRetestTh = binRow.RetestTh;
-                FillFixedBinCells(row, binRow);
-
-                if (!await SelectBinIdPopupExactAsync(row, target.BinIdName))
-                {
-                    _logger.Warn($"BIN ID 미설정으로 저장 건너뜀. part='{request.PartNo}', binId='{target.BinIdName}'");
-                    RecordResult("ERROR", "NO", $"BIN ID 미설정. binId='{target.BinIdName}'");
-                    continue;
-                }
-
-                if (SaveItemInfo(mainWindow))
-                {
-                    await DelayAsync(300);
-                    if (await ConfirmBinSaveValidationPopupAsync(request.PartNo))
+                    if (!IsElementUsable(binWindow))
                     {
-                        _logger.Error($"BIN 저장 검증 경고로 저장 실패 처리. part='{request.PartNo}'");
-                        RecordResult("ERROR", "NO", "BIN 저장 검증 경고 발생");
-                        continue;
+                        binWindow = FindNamedWindow(mainWindow, _config.Global.BinInfoMenuName) ?? mainWindow;
                     }
 
-                    _screenshots.CaptureElement(binWindow, $"bin_after_save_{MakeSafeToken(request.PartNo)}");
-                    _logger.Info($"BIN saved. part='{request.PartNo}', binId='{target.BinIdName}', elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
-                    RecordResult("OK", "YES", $"BIN 저장 완료. binId='{target.BinIdName}'");
+                    var row = await InsertBinRowAsync(mainWindow, binWindow);
+                    if (row is null)
+                    {
+                        _logger.Error($"BIN 추가 행 미발견. part='{request.PartNo}', row={rowNo}");
+                        _screenshots.CaptureElement(binWindow, $"bin_new_row_not_found_{MakeSafeToken(request.PartNo)}_{rowNo}");
+                        RecordResult(rowTarget, "ERROR", "NO", "BIN 추가 행 미발견");
+                        stopPart = true;
+                        break;
+                    }
+
+                    if (!await SelectProcessPopupAsync(row, rowTarget.ProcessSearchKey))
+                    {
+                        _logger.Error($"BIN 공정명 입력 실패. part='{request.PartNo}', key='{rowTarget.ProcessSearchKey}', row={rowNo}");
+                        RecordResult(rowTarget, "ERROR", "NO", $"BIN 공정명 입력 실패. key='{rowTarget.ProcessSearchKey}'");
+                        stopPart = true;
+                        break;
+                    }
+
+                    if (!IsElementUsable(row))
+                    {
+                        row = FindNewBinRow(binWindow);
+                    }
+
+                    if (row is null)
+                    {
+                        _logger.Error($"BIN 공정명 선택 후 행 재탐색 실패. part='{request.PartNo}', row={rowNo}");
+                        RecordResult(rowTarget, "ERROR", "NO", "BIN 공정명 선택 후 행 재탐색 실패");
+                        stopPart = true;
+                        break;
+                    }
+
+                    FillFixedBinCells(row, rowTarget.Row);
+
+                    if (!await SelectBinIdPopupExactAsync(row, rowTarget.BinIdName))
+                    {
+                        _logger.Warn($"BIN ID 미설정으로 저장 건너뜀. part='{request.PartNo}', binId='{rowTarget.BinIdName}', row={rowNo}");
+                        RecordResult(rowTarget, "ERROR", "NO", $"BIN ID 미설정. binId='{rowTarget.BinIdName}'");
+                        stopPart = true;
+                        break;
+                    }
+
+                    if (SaveItemInfo(mainWindow))
+                    {
+                        await DelayAsync(300);
+                        if (await ConfirmBinSaveValidationPopupAsync(request.PartNo))
+                        {
+                            _logger.Error($"BIN 저장 검증 경고로 저장 실패 처리. part='{request.PartNo}', row={rowNo}");
+                            RecordResult(rowTarget, "ERROR", "NO", "BIN 저장 검증 경고 발생");
+                            stopPart = true;
+                            break;
+                        }
+
+                        _screenshots.CaptureElement(binWindow, $"bin_after_save_{MakeSafeToken(request.PartNo)}_{rowNo}");
+                        _logger.Info($"BIN saved. part='{request.PartNo}', binId='{rowTarget.BinIdName}', row={rowNo}, elapsed={binQueryStopwatch.Elapsed.TotalSeconds:0.000}s");
+                        RecordResult(rowTarget, "OK", "YES", $"BIN 저장 완료. binId='{rowTarget.BinIdName}'");
+                    }
+                    else
+                    {
+                        _logger.Warn($"BIN 저장 게이트로 저장 생략. part='{request.PartNo}', binId='{rowTarget.BinIdName}', row={rowNo}");
+                        RecordResult(rowTarget, "DRYRUN", "NO", $"BIN 저장 게이트로 저장 생략. binId='{rowTarget.BinIdName}'");
+                    }
                 }
-                else
+
+                if (stopPart)
                 {
-                    _logger.Warn($"BIN 저장 게이트로 저장 생략. part='{request.PartNo}', binId='{target.BinIdName}'");
-                    RecordResult("DRYRUN", "NO", $"BIN 저장 게이트로 저장 생략. binId='{target.BinIdName}'");
+                    continue;
                 }
             }
             catch (OperationCanceledException)
@@ -691,7 +706,7 @@ public sealed class UnimesApp
                 _screenshots.CaptureElement(binWindow, $"bin_exception_{MakeSafeToken(request.PartNo)}");
                 if (!resultRecorded)
                 {
-                    RecordResult("ERROR", "NO", ex.Message);
+                    RecordResult(null, "ERROR", "NO", ex.Message);
                 }
 
                 if (_config.Workflow.StopOnFirstFailure)

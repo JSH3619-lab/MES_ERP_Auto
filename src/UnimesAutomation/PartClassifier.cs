@@ -4,6 +4,7 @@ public enum PartClass
 {
     Module,
     Comp,
+    Ssd,
     Unknown
 }
 
@@ -15,6 +16,7 @@ public static class PartClassifier
 {
     private static readonly string[] ModulePrefixes = ["RM", "TM", "BM", "CM", "ZM"];
     private static readonly string[] CompPrefixes = ["RC", "TC", "BC", "CC", "ZC"];
+    private static readonly string[] SsdPrefixes = ["DA", "DE"];
 
     public static PartClass Classify(string partNo)
     {
@@ -25,6 +27,11 @@ public static class PartClassifier
         }
 
         var prefix = normalized[..2];
+        if (SsdPrefixes.Contains(prefix))
+        {
+            return PartClass.Ssd;
+        }
+
         if (ModulePrefixes.Contains(prefix))
         {
             return PartClass.Module;

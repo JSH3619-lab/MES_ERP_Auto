@@ -1,3 +1,4 @@
+using System.Linq;
 using UnimesAutomation;
 using Xunit;
 
@@ -40,5 +41,61 @@ public class BinIdResolverTests
     public void Unresolvable_returns_null(string part)
     {
         Assert.Null(BinIdResolver.Resolve(part, "M050", "C010"));
+    }
+
+    [Fact]
+    public void Ssd_b0_resolves_two_rows()
+    {
+        var cfg = RootConfig.CreateDefault();
+
+        var target = BinIdResolver.Resolve("DABHGD8J5F-HRRXZ21B0", cfg);
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Ssd, target!.Class);
+        Assert.Equal(2, target.Rows.Count);
+        Assert.All(target.Rows, r => Assert.Equal("M020", r.ProcessSearchKey));
+        Assert.Equal(["SSD_RDT_512GB", "SSD_RDT_512GB"], target.Rows.Select(r => r.BinIdName).ToArray());
+        Assert.Equal(["Normal-1", "Normal-1"], target.Rows.Select(r => r.Row.BinType).ToArray());
+        Assert.Equal(["0", "1"], target.Rows.Select(r => r.Row.RetestNo).ToArray());
+        Assert.Equal(["N", "Y"], target.Rows.Select(r => r.Row.BinComplete).ToArray());
+        Assert.Equal(["Normal", "Normal"], target.Rows.Select(r => r.Row.RetestTh).ToArray());
+    }
+
+    [Fact]
+    public void Ssd_r0_resolves_three_rows()
+    {
+        var cfg = RootConfig.CreateDefault();
+
+        var target = BinIdResolver.Resolve("DABHGD8J5F-HRRXZ21R0", cfg);
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Ssd, target!.Class);
+        Assert.Equal(3, target.Rows.Count);
+        Assert.Equal(
+            ["SSD_RDT_512GB", "SSD_RDT_512GB_R", "SSD_ValueTrime_480GB"],
+            target.Rows.Select(r => r.BinIdName).ToArray());
+        Assert.Equal(["Normal-1", "Normal-2", "Special-1"], target.Rows.Select(r => r.Row.BinType).ToArray());
+        Assert.Equal(["0", "1", "2"], target.Rows.Select(r => r.Row.RetestNo).ToArray());
+        Assert.Equal(["N", "N", "Y"], target.Rows.Select(r => r.Row.BinComplete).ToArray());
+        Assert.Equal(["H", "Normal", "Normal"], target.Rows.Select(r => r.Row.RetestTh).ToArray());
+    }
+
+    [Theory]
+    [InlineData("DAXBGD8J5F-HRRXZ21B0", "SSD_RDT_32GB")]
+    [InlineData("DEXKGD8J5F-HRRXZ21B0", "SSD_RDT_1TB")]
+    public void Ssd_resolves_capacity_code_from_fourth_and_fifth_characters(string part, string expected)
+    {
+        var target = BinIdResolver.Resolve(part, RootConfig.CreateDefault());
+
+        Assert.NotNull(target);
+        Assert.Equal(expected, target!.Rows[0].BinIdName);
+    }
+
+    [Theory]
+    [InlineData("DABHGD8J5F-HRRXZ21X0")]
+    [InlineData("DAXXGD8J5F-HRRXZ21B0")]
+    public void Ssd_unresolvable_returns_null(string part)
+    {
+        Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
     }
 }

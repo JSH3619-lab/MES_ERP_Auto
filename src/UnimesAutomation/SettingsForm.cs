@@ -19,6 +19,7 @@ public sealed class SettingsForm : Form
 
     private readonly CategorySettingsControl _modulePanel;
     private readonly CategorySettingsControl _compPanel;
+    private readonly SsdSettingsControl _ssdPanel;
     private readonly Panel _host = new() { Dock = DockStyle.Fill };
     private bool _hasSavedPassword;
     private bool _passwordEdited;
@@ -30,6 +31,7 @@ public sealed class SettingsForm : Form
         _config = ConfigStore.Load(appSettingsPath);
         _modulePanel = new CategorySettingsControl(_config.Categories.DramModule, _config.Options) { Dock = DockStyle.Fill };
         _compPanel = new CategorySettingsControl(_config.Categories.DramComp, _config.Options) { Dock = DockStyle.Fill };
+        _ssdPanel = new SsdSettingsControl(_config.Categories.Ssd, _config.Options) { Dock = DockStyle.Fill };
 
         Text = "설정";
         Width = 760;
@@ -43,6 +45,7 @@ public sealed class SettingsForm : Form
         nav.Controls.Add(NavButton("로그인 정보", BuildLoginPanel));
         nav.Controls.Add(NavButton("DRAM Module", () => _modulePanel));
         nav.Controls.Add(NavButton("DRAM Comp", () => _compPanel));
+        nav.Controls.Add(NavButton("SSD", () => _ssdPanel));
         nav.Controls.Add(NavButton("고급", BuildAdvancedPanel));
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
@@ -182,6 +185,7 @@ public sealed class SettingsForm : Form
         _config.Global.RecoveryPart = _recoveryPart.Text.Trim();
         _modulePanel.ApplyTo(_config.Categories.DramModule);
         _compPanel.ApplyTo(_config.Categories.DramComp);
+        _ssdPanel.ApplyTo(_config.Categories.Ssd);
 
         ConfigStore.Save(_path, _config);
         DialogResult = DialogResult.OK;

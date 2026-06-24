@@ -22,6 +22,10 @@ public class ConfigStoreTests
             Assert.Equal("C999", loaded.Categories.DramComp.BinInfo.ProcessSearchKey);
             Assert.Equal("제품 폐기창고", loaded.Categories.DramModule.ItemInfo.DefectWarehouse);
             Assert.Single(loaded.Categories.DramModule.BinInfo.Rows);
+            Assert.Equal("제품 폐기창고", loaded.Categories.Ssd.ItemInfo.DefectWarehouse);
+            Assert.Equal("", loaded.Categories.Ssd.ItemInfo.AssemblyIn);
+            Assert.Equal(2, loaded.Categories.Ssd.B0BinInfo.Rows.Count);
+            Assert.Equal(3, loaded.Categories.Ssd.R0BinInfo.Rows.Count);
         }
         finally
         {
@@ -59,6 +63,9 @@ public class ConfigStoreTests
             Assert.Equal("C010", loaded.Categories.DramComp.BinInfo.ProcessSearchKey);
             Assert.Equal("H", loaded.Categories.DramModule.BinInfo.Rows[0].RetestTh);
             Assert.Equal("품목별 BIN 정보 관리", loaded.Global.BinInfoMenuName);
+            Assert.Equal("M020", loaded.Categories.Ssd.B0BinInfo.ProcessSearchKey);
+            Assert.Contains("Special-1", loaded.Options.BinTypes);
+            Assert.Contains("Normal", loaded.Options.RetestThs);
         }
         finally
         {
