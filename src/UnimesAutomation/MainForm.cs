@@ -43,6 +43,7 @@ public sealed class MainForm : Form
     private readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None };
     private bool _running;
     private CancellationTokenSource? _cts;
+    private readonly Image _logo = LoadLogo();
 
     public MainForm(RootConfig config, RuntimePaths paths, SimpleLogger logger, ScreenshotService screenshots, CommandLineOptions options, string appSettingsPath)
     {
@@ -55,12 +56,13 @@ public sealed class MainForm : Form
 
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(600, 586);
+        ClientSize = new Size(600, 612);
         BackColor = UiTheme.Border;          // 1px 외곽선
         Padding = new Padding(1);
-        Font = UiTheme.Mono(12f);
+        Font = UiTheme.Ui(10.5f);
 
         Controls.Add(BuildBody());
+        Controls.Add(BuildFooter());
         Controls.Add(BuildHeader());
 
         _logger.LineWritten += OnLogLine;
@@ -71,43 +73,85 @@ public sealed class MainForm : Form
         UpdateStatus();
     }
 
-    // ── 헤더 (커스텀 타이틀바 + 코너 브래킷 + 드래그) ───────────────────────
+    // ── 헤더 (브랜드 로고 + 커스텀 타이틀바 + 드래그) ───────────────────────
     private Control BuildHeader()
     {
-        var header = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = UiTheme.Surface };
-        header.Paint += (_, e) => DrawBrackets(e.Graphics, header.Width, header.Height, top: true);
+        var header = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UiTheme.Background };
+        header.Paint += (_, e) =>
+        {
+            using var pen = new Pen(UiTheme.Navy, 2);
+            e.Graphics.DrawLine(pen, 0, header.Height - 1, header.Width, header.Height - 1);
+        };
         header.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) StartDrag(); };
 
-        var title = new Label
+        var logo = new PictureBox
+        {
+            Image = _logo,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Location = new Point(14, 9),
+            Size = new Size(140, 38),
+            BackColor = UiTheme.Background
+        };
+        logo.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) StartDrag(); };
+
+        var subtitle = new Label
         {
             AutoSize = true,
-            Location = new Point(14, 11),
-            Text = "▌ UNIMES // AUTOMATION",
-            ForeColor = UiTheme.Text,
-            Font = UiTheme.Mono(14.5f, FontStyle.Bold)
+            Location = new Point(168, 21),
+            Text = "MES AUTOMATION",
+            ForeColor = UiTheme.TextFaint,
+            Font = UiTheme.Ui(9f)
         };
-        title.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) StartDrag(); };
+        subtitle.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) StartDrag(); };
 
         var rightBar = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 230,
+            Width = 120,
             FlowDirection = FlowDirection.RightToLeft,
-            BackColor = UiTheme.Surface,
-            Padding = new Padding(0, 8, 8, 0)
+            BackColor = UiTheme.Background,
+            Padding = new Padding(0, 10, 10, 0)
         };
         rightBar.Controls.Add(HeaderButton("✕", UiTheme.Danger, Close));
         rightBar.Controls.Add(HeaderButton("—", UiTheme.TextDim, () => WindowState = FormWindowState.Minimized));
-        rightBar.Controls.Add(new Label { Text = "● LINK: MES", AutoSize = true, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(12f), Margin = new Padding(8, 4, 8, 0) });
 
-        header.Controls.Add(title);
+        header.Controls.Add(subtitle);
+        header.Controls.Add(logo);
         header.Controls.Add(rightBar);
         return header;
     }
 
+    private static Image LoadLogo()
+    {
+        var asm = typeof(MainForm).Assembly;
+        var name = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("ramos_wordmark.png", System.StringComparison.OrdinalIgnoreCase));
+        if (name is null)
+        {
+            return new Bitmap(1, 1);
+        }
+
+        using var stream = asm.GetManifestResourceStream(name)!;
+        return Image.FromStream(stream);
+    }
+
+    // ── 푸터 (회사명 + 버전) ───────────────────────────────────────────────
+    private Control BuildFooter()
+    {
+        var footer = new Panel { Dock = DockStyle.Bottom, Height = 26, BackColor = UiTheme.Surface };
+        footer.Paint += (_, e) =>
+        {
+            using var pen = new Pen(UiTheme.Border);
+            e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0);
+        };
+        footer.Controls.Add(new Label { Text = "  RAMOS Technology co., Ltd.", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.Navy, Font = UiTheme.Ui(9f, FontStyle.Bold), Width = 260 });
+        footer.Controls.Add(new Label { Text = "UNIMES Automation · v1.0  ", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(9f), Width = 220 });
+        return footer;
+    }
+
     private Label HeaderButton(string text, Color color, Action onClick)
     {
-        var b = new Label { Text = text, AutoSize = true, ForeColor = color, Font = UiTheme.Mono(12f, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(6, 2, 6, 0) };
+        var b = new Label { Text = text, AutoSize = true, ForeColor = color, Font = UiTheme.Ui(13f, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(6, 2, 6, 0) };
         b.Click += (_, _) => onClick();
         return b;
     }
@@ -119,7 +163,7 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = UiTheme.Background,
-            Padding = new Padding(14, 10, 14, 10),
+            Padding = new Padding(16, 12, 16, 12),
             ColumnCount = 1,
             RowCount = 9
         };
@@ -143,55 +187,62 @@ public sealed class MainForm : Form
         _parts.BackColor = UiTheme.SurfaceDeep;
         _parts.ForeColor = UiTheme.Text;
         _parts.Font = UiTheme.Mono(12.5f);
-        body.Controls.Add(_parts, 0, 1);
+        var partsHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Navy, Padding = new Padding(3, 0, 0, 0) };
+        partsHost.Controls.Add(_parts);
+        body.Controls.Add(partsHost, 0, 1);
 
         var scopeRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Margin = new Padding(0) };
-        scopeRow.Controls.Add(new Label { Text = "작업 범위", AutoSize = true, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(12f), Margin = new Padding(0, 8, 8, 0) });
+        scopeRow.Controls.Add(new Label { Text = "작업 범위", AutoSize = true, ForeColor = UiTheme.TextDim, Font = UiTheme.Ui(10.5f), Margin = new Padding(0, 8, 8, 0) });
         _scope.Items.AddRange(["통합품목관리", "품목정보관리", "품목 BIN정보 관리"]);
         _scope.SelectedIndex = 0;
         _scope.FlatStyle = FlatStyle.Flat;
         _scope.BackColor = UiTheme.SurfaceDeep;
         _scope.ForeColor = UiTheme.Text;
-        _scope.Font = UiTheme.Mono(12.5f);
+        _scope.Font = UiTheme.Ui(10.5f);
         scopeRow.Controls.Add(_scope);
         body.Controls.Add(scopeRow, 0, 2);
 
         var statusRow = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
-        _statusLabel.ForeColor = UiTheme.Accent;
-        _statusLabel.Font = UiTheme.Mono(12.5f);
-        _counterLabel.ForeColor = UiTheme.TextDim;
+        _statusLabel.ForeColor = UiTheme.Success;
+        _statusLabel.Font = UiTheme.Ui(11f, FontStyle.Bold);
+        _counterLabel.ForeColor = UiTheme.Navy;
         _counterLabel.Font = UiTheme.Mono(12.5f);
         statusRow.Controls.Add(_statusLabel);
         statusRow.Controls.Add(_counterLabel);
         body.Controls.Add(statusRow, 0, 3);
 
-        _progressTrack.BackColor = UiTheme.SurfaceDeep;
-        _progressFill.BackColor = UiTheme.Accent;
+        _progressTrack.BackColor = UiTheme.Border;
+        _progressFill.BackColor = UiTheme.Navy;
         _progressTrack.Controls.Add(_progressFill);
         body.Controls.Add(_progressTrack, 0, 4);
 
         var logHeader = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
-        logHeader.Controls.Add(new Label { Text = Path.GetFileName(_paths.RunLogPath), Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(10.5f), Width = 240 });
-        logHeader.Controls.Add(new Label { Text = "EXEC LOG", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(12f), Width = 120 });
+        logHeader.Controls.Add(new Label { Text = Path.GetFileName(_paths.RunLogPath), Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight, ForeColor = UiTheme.TextFaint, Font = UiTheme.Mono(9.5f), Width = 240 });
+        logHeader.Controls.Add(new Label { Text = "실행 로그", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.TextDim, Font = UiTheme.Ui(10.5f), Width = 120 });
         body.Controls.Add(logHeader, 0, 5);
 
-        var logHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.SurfaceDeep, Padding = new Padding(8, 6, 8, 6) };
-        _log.BackColor = UiTheme.SurfaceDeep;
-        _log.ForeColor = UiTheme.TextDim;
-        _log.Font = UiTheme.Mono(12f);
+        var logHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.LogBackground, Padding = new Padding(8, 6, 8, 6) };
+        _log.BackColor = UiTheme.LogBackground;
+        _log.ForeColor = UiTheme.LogText;
+        _log.Font = UiTheme.Mono(11f);
         logHost.Controls.Add(_log);
         body.Controls.Add(logHost, 0, 6);
 
-        var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(26, 20, 10), Padding = new Padding(10, 0, 8, 0) };
-        banner.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(92, 68, 16)); e.Graphics.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1); };
-        _safetyLabel.Font = UiTheme.Mono(12.5f);
+        var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(251, 239, 239), Padding = new Padding(12, 0, 8, 0) };
+        banner.Paint += (_, e) =>
+        {
+            using var pen = new Pen(UiTheme.Danger);
+            e.Graphics.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1);
+            using var bar = new SolidBrush(UiTheme.Danger);
+            e.Graphics.FillRectangle(bar, 0, 0, 3, banner.Height);
+        };
+        _safetyLabel.Font = UiTheme.Ui(11f, FontStyle.Bold);
         banner.Controls.Add(_safetyLabel);
         body.Controls.Add(banner, 0, 7);
 
-        var buttonBar = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 12, 0, 0) };
-        buttonBar.Paint += (_, e) => DrawBrackets(e.Graphics, buttonBar.Width, buttonBar.Height, top: false);
-        StyleButton(_settings, UiTheme.TextDim, UiTheme.Border, "CONFIG");
-        StyleButton(_run, UiTheme.Accent, UiTheme.Accent, "실행");
+        var buttonBar = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 14, 0, 0) };
+        StyleButton(_settings, UiTheme.Gray, UiTheme.Background, UiTheme.Gray, "설정");
+        StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "실행");
         _settings.Click += (_, _) => OpenSettings();
         _run.Click += async (_, _) =>
         {
@@ -212,16 +263,16 @@ public sealed class MainForm : Form
     }
 
     private static Label Dim(string text)
-        => new() { Text = text, Dock = DockStyle.Fill, ForeColor = UiTheme.TextDim, Font = UiTheme.Mono(12f), TextAlign = ContentAlignment.MiddleLeft };
+        => new() { Text = text, Dock = DockStyle.Fill, ForeColor = UiTheme.TextDim, Font = UiTheme.Ui(10.5f), TextAlign = ContentAlignment.MiddleLeft };
 
-    private static void StyleButton(Button b, Color fg, Color border, string text)
+    private static void StyleButton(Button b, Color fg, Color bg, Color border, string text)
     {
         b.Text = text;
-        b.Height = 34;
+        b.Height = 40;
         b.FlatStyle = FlatStyle.Flat;
-        b.BackColor = UiTheme.Surface;
+        b.BackColor = bg;
         b.ForeColor = fg;
-        b.Font = UiTheme.Mono(12.5f, FontStyle.Bold);
+        b.Font = UiTheme.Ui(12f, FontStyle.Bold);
         b.FlatAppearance.BorderColor = border;
     }
 
@@ -229,26 +280,6 @@ public sealed class MainForm : Form
     {
         ReleaseCapture();
         SendMessage(Handle, WmNcLButtonDown, HtCaption, 0);
-    }
-
-    private static void DrawBrackets(Graphics g, int w, int h, bool top)
-    {
-        const int n = 14;
-        using var pen = new Pen(top ? UiTheme.Accent : UiTheme.Border, 2);
-        if (top)
-        {
-            g.DrawLine(pen, 3, 3, 3 + n, 3);
-            g.DrawLine(pen, 3, 3, 3, 3 + n);
-            g.DrawLine(pen, w - 3 - n, 3, w - 3, 3);
-            g.DrawLine(pen, w - 3, 3, w - 3, 3 + n);
-        }
-        else
-        {
-            g.DrawLine(pen, 3, h - 3, 3 + n, h - 3);
-            g.DrawLine(pen, 3, h - 3, 3, h - 3 - n);
-            g.DrawLine(pen, w - 3 - n, h - 3, w - 3, h - 3);
-            g.DrawLine(pen, w - 3, h - 3, w - 3, h - 3 - n);
-        }
     }
 
     // ── 로그 스트리밍 (색 구분 + 진행률 파싱) ──────────────────────────────
@@ -276,29 +307,29 @@ public sealed class MainForm : Form
             _log.Clear();
         }
 
-        var color = UiTheme.Accent;
+        var color = UiTheme.LogInfo;
         var token = "[INFO]";
         if (line.Contains("[WARN]"))
         {
-            color = UiTheme.Warn;
+            color = UiTheme.LogWarn;
             token = "[WARN]";
         }
         else if (line.Contains("[ERROR]"))
         {
-            color = UiTheme.Danger;
+            color = UiTheme.LogDanger;
             token = "[ERROR]";
         }
 
         var idx = line.IndexOf(token, System.StringComparison.Ordinal);
         if (idx < 0)
         {
-            AppendSegment(line + System.Environment.NewLine, UiTheme.TextDim);
+            AppendSegment(line + System.Environment.NewLine, UiTheme.LogText);
         }
         else
         {
-            AppendSegment(line[..idx], UiTheme.TextFaint);
+            AppendSegment(line[..idx], UiTheme.LogFaint);
             AppendSegment(token, color);
-            AppendSegment(line[(idx + token.Length)..] + System.Environment.NewLine, UiTheme.TextDim);
+            AppendSegment(line[(idx + token.Length)..] + System.Environment.NewLine, UiTheme.LogText);
         }
 
         _log.SelectionStart = _log.TextLength;
@@ -325,13 +356,13 @@ public sealed class MainForm : Form
     {
         if (_running)
         {
-            _statusLabel.Text = $"▸ RUNNING · {_scope.Text}";
-            _statusLabel.ForeColor = UiTheme.Accent;
+            _statusLabel.Text = $"● RUNNING · {_scope.Text}";
+            _statusLabel.ForeColor = UiTheme.Navy;
         }
         else
         {
-            _statusLabel.Text = "▸ READY";
-            _statusLabel.ForeColor = UiTheme.TextDim;
+            _statusLabel.Text = "● READY · 대기";
+            _statusLabel.ForeColor = UiTheme.Success;
         }
     }
 
@@ -475,12 +506,12 @@ public sealed class MainForm : Form
         _settings.Enabled = !running;
         if (running)
         {
-            StyleButton(_run, UiTheme.Danger, UiTheme.Danger, "■ 정지");
+            StyleButton(_run, Color.White, UiTheme.Danger, UiTheme.Danger, "■ 정지");
             _run.Enabled = true;
         }
         else
         {
-            StyleButton(_run, UiTheme.Accent, UiTheme.Accent, "실행");
+            StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "실행");
             _run.Enabled = true;
             _progressFill.Width = 0;
             _counterLabel.Text = "";

@@ -51,7 +51,7 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 현재 단위 테스트 기준:
 
-- 25개 통과
+- 31개 통과
 - 실패 0개
 
 ## 핵심 동작
@@ -90,6 +90,29 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
   - `writableEdit=False`이면 `Home Page 탭 전환 후 F3 메뉴찾기 재입력` 로그가 나온 뒤 BIN 정보 관리 화면 진입 여부를 확인한다.
   - BIN 행추가에서 `BIN 행추가 Ctrl+Insert 성공`이 먼저 나오는지 확인한다. 실패 시에만 버튼 fallback 로그가 나와야 한다.
   - `elapsed=` 로그 기준으로 5초 이상 구간만 다음 최적화 대상으로 본다.
+
+## 성능 최적화 후보 (미진행 · 다른 세션에서 진행)
+
+근거 로그: `logs/run_20260624_142947.log` (SSD 2파트 · BIN 5행 · 총 약 124초). 코드 미수정 상태. 효과/리스크 순.
+
+### 1) BIN 팝업 InvokePattern 선시도 제거 — 효과 최대 / 리스크 낮음
+- 현상: BIN 행마다 `공정명`(~4.6s) · `BIN ID`(~4.2s) 팝업에서 매번 `InvokePattern unavailable` 로그 후 ~3초 대기하고 좌표 fallback으로 선택. 행당 약 9초.
+- InvokePattern이 항상 실패하므로, 선시도/대기를 건너뛰고 바로 좌표 클릭으로 간다.
+- 대상: `SelectProcessPopupAsync`, `SelectBinIdPopupExactAsync`.
+- 기대 단축: 행당 4~6초, 5행 기준 20~30초.
+
+### 2) 완료 알림 먼저 띄우고 결과 xlsx는 그 뒤/백그라운드 — 효과 중 / 리스크 낮음
+- 현상: BIN 종료 → 결과 xlsx 저장(~1.8s) → 완료 → 알림창. 체감 약 3초.
+- 알림창을 먼저 표시하고 `ResultWorkbook` 저장을 이후(또는 백그라운드)로 옮긴다.
+- 기대 단축: 체감 약 1.8초.
+
+### 3) 품목정보관리 → BIN 전환 단축 — 효과 중 / 리스크 높음
+- 현상: 전환에 약 12초. 분해: 메뉴 입력칸 활성화 ~4.4s + 화면확인 폴링 ~3.1s + BIN 컨트롤 캐시(`FindBinPartIdEdit`) ~4.3s.
+- 가능: 컨트롤 캐시 탐색 범위 축소, `WaitForMenuScreenAsync` 폴링 간격/타임아웃 조정.
+- 리스크: 전부 UIA 탐색·안전폴링이라 줄이면 오탐/실패율 상승. 실기 반복 검증 필수.
+
+### 유지: BIN 행 단위 저장(Ctrl+S)
+- 행마다 저장은 의도된 구조 — 행별 검증 경고 격리 + 부분성공 보존. 배치 저장은 MES 수용 여부 미검증이라 성능 목적 변경 비권장.
 
 ## 주의점
 
