@@ -9,6 +9,7 @@ dist/
 .vscode/
 .claude/
 .code-review-graph/
+.understand-anything/
 appsettings.json
 appsettings.save-test.json
 *.user
