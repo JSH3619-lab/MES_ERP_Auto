@@ -56,7 +56,7 @@ public sealed class MainForm : Form
 
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(600, 612);
+        ClientSize = new Size(600, 640);
         BackColor = UiTheme.Border;          // 1px 외곽선
         Padding = new Padding(1);
         Font = UiTheme.Ui(10.5f);
@@ -242,7 +242,7 @@ public sealed class MainForm : Form
 
         var buttonBar = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background, Padding = new Padding(0, 14, 0, 0) };
         StyleButton(_settings, UiTheme.Gray, UiTheme.Background, UiTheme.Gray, "설정");
-        StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "실행");
+        StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "▶ 실행");
         _settings.Click += (_, _) => OpenSettings();
         _run.Click += async (_, _) =>
         {
@@ -511,7 +511,7 @@ public sealed class MainForm : Form
         }
         else
         {
-            StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "실행");
+            StyleButton(_run, Color.White, UiTheme.Navy, UiTheme.Navy, "▶ 실행");
             _run.Enabled = true;
             _progressFill.Width = 0;
             _counterLabel.Text = "";
