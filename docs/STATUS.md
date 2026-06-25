@@ -49,6 +49,17 @@
 - `UnimesApp.cs`(4,608줄) → 코어 + `.Bin`·`.Menu`·`.Dialogs` partial 분할(컴파일 시 한 타입, IL 동일, 호출부 변경 0).
 - 로깅: 예상된 UIA 패턴 미지원→폴백 5곳을 `Warn`→`Debug` 강등. `SimpleLogger.Debug` 추가, GUI 콘솔은 `[DEBUG]` 미표시(파일엔 기록). WARN은 `did not commit` 같은 실제 문제에만 남긴다.
 
+## SIP 분류 추가 — 2026-06-25
+
+신규 분류 SIP(prefix `SN`). DRAM/SSD와 같은 워크플로 재사용, 규칙만 추가. 설계: `docs/superpowers/specs/2026-06-25-sip-item-info-marking-design.md`.
+
+- 품목정보관리: BIN/TurnKey/조립입고/불량창고 = Y/N/Y/제품폐기창고(DRAM MDL 동일) + `Marking`.
+  - base Marking: PID 파생 `AK…A8YWW`. 끝 2글자 `0S/0G/0J/0K`면 생략.
+  - **MFGID 변형**: PID 조회 시 그리드에 base + 변형 N행이 함께 뜸. `품목ID`가 `PID + "-"`로 시작하는 행에 `"{MFGID 용량} {base}"` Marking만 입력(다른 셀 미터치). `-` 앵커로 `…0J/0S/00`(다른 파트·더미) 배제. 변형 행도 result.xlsx에 각각 기록.
+- 품목별 BIN 정보 관리: 공정 M030 2행, BIN ID=`SIP_Normal_{용량}_AIO`(용량=파트 4–5자), 1행 Bin완료여부 미설정·2행 Y, Retest TH Normal·Y.
+- 설정 SIP 탭, Marking 셀은 ValuePattern→더블클릭 폴백.
+- 실기 확인: 품목정보+Marking(base+변형) 동작 확인됨. BIN 2행은 스모크 단계.
+
 ## 검증 상태
 
 항상 커밋 전 다음 명령을 통과시킨다.
@@ -61,7 +72,7 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 현재 단위 테스트 기준:
 
-- 31개 통과
+- 55개 통과 (DRAM/SSD/SIP 분류 + Marking/BIN 규칙 + 결과 워크북)
 - 실패 0개
 
 ## 핵심 동작

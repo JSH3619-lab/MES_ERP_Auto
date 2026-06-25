@@ -35,4 +35,32 @@ public class SipMarkingTests
     {
         Assert.Equal(PartClass.Sip, PartClassifier.Classify("SNAKGD8J0B-HPRA81"));
     }
+
+    // 실물 조회결과(검색 PID = SNAKGD8J0B-HZRA81) 기준. base=Z 자리라 AKBHZA8YWW.
+    [Theory]
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA81", "AKBHZA8YWW")]            // base(==PID)
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA81-AP4GF0T", "4G AKBHZA8YWW")] // AP 변형
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA81-APDGA00", "DG AKBHZA8YWW")] // AP 변형
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA81-TPDGA0T", "DG AKBHZA8YWW")] // TP 변형
+    public void RowMarking_marks_base_and_variants(string pid, string rowId, string expected)
+    {
+        Assert.Equal(expected, SipMarking.RowMarking(pid, rowId));
+    }
+
+    // P 뒤가 '-'가 아니면(00/0J/0S) 다른 파트라 절대 건드리지 않음.
+    [Theory]
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA8100")]          // 더미(00)
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA810J")]          // 다른 PID(0J)
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA810J-TPDGA0T")]  // 810J 변형
+    [InlineData("SNAKGD8J0B-HZRA81", "SNAKGD8J0B-HZRA810S-TP4GF0T")]  // 810S 변형
+    public void RowMarking_excludes_other_pids_and_dummy(string pid, string rowId)
+    {
+        Assert.Equal("", SipMarking.RowMarking(pid, rowId));
+    }
+
+    [Fact]
+    public void RowMarking_returns_empty_when_pid_is_exception()
+    {
+        Assert.Equal("", SipMarking.RowMarking("SNAKGD8J0B-HZRA0J", "SNAKGD8J0B-HZRA0J"));
+    }
 }

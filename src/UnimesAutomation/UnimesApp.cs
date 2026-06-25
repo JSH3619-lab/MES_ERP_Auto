@@ -429,6 +429,34 @@ public sealed partial class UnimesApp
                     _logger.Info($"품목정보관리 SIP Marking 생략(예외 접미). part='{request.PartNo}', pid='{pid}'");
                 }
 
+                // SIP MFGID 변형 행: 품목ID가 'pid + "-"' 로 시작하는 모든 행에 Marking만 입력(다른 셀 미터치).
+                // 'pid + "-"' 앵커라 ...0J/0S/00 같은 다른 PID 행은 배제된다. 저장은 아래 Ctrl+S 1회에 함께 포함.
+                var sipVariants = new List<(string RowId, string Marking, CellAction Action)>();
+                if (classification == PartClass.Sip)
+                {
+                    foreach (var (variantRow, rowId) in FindItemGridRowsStartingWith(itemInfoWindow, pid + "-"))
+                    {
+                        var vMarking = SipMarking.RowMarking(pid, rowId);
+                        if (string.IsNullOrEmpty(vMarking))
+                        {
+                            continue;
+                        }
+
+                        var vAction = ApplyMarkingTextCell(variantRow, "Marking", vMarking, readOnlyMode);
+                        sipVariants.Add((rowId, vMarking, vAction));
+                        if (vAction == CellAction.Changed)
+                        {
+                            changeCount++;
+                            detail.Add($"Marking[{rowId}]={vMarking}");
+                        }
+                        else if (vAction == CellAction.WouldChange)
+                        {
+                            wouldCount++;
+                            detail.Add($"Marking[{rowId}]→{vMarking}");
+                        }
+                    }
+                }
+
                 _screenshots.CaptureElement(itemInfoWindow, $"item_info_before_save_{request.PartNo}");
 
                 if (changeCount == 0 && wouldCount == 0)
@@ -463,6 +491,21 @@ public sealed partial class UnimesApp
                 }
 
                 results.Add(result);
+
+                // SIP 변형 행도 결과에 기록(품목ID + Marking). 저장은 base와 같은 Ctrl+S라 상태 공유.
+                foreach (var v in sipVariants)
+                {
+                    results.Add(new PartResult
+                    {
+                        PartNo = v.RowId,
+                        Classification = classification.ToString(),
+                        Marking = v.Marking,
+                        Saved = v.Action == CellAction.Unchanged ? "UNCHANGED" : result.Saved,
+                        Status = result.Status,
+                        Message = "MFGID Marking",
+                        ProcessedAt = DateTime.Now
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
@@ -588,6 +631,29 @@ public sealed partial class UnimesApp
         }
 
         return null;
+    }
+
+    // 품목ID가 prefix로 시작하는 모든 그리드 행(행, 품목ID). SIP MFGID 변형 행 열거용.
+    private List<(AutomationElement Row, string ProductId)> FindItemGridRowsStartingWith(AutomationElement mainWindow, string prefix)
+    {
+        var result = new List<(AutomationElement, string)>();
+        foreach (var row in FindDescendants(mainWindow, ControlType.DataItem))
+        {
+            var idEdit = FindDescendants(row, ControlType.Edit)
+                .FirstOrDefault(edit => string.Equals(SafeRead(() => edit.Current.Name) ?? "", "품목ID", StringComparison.Ordinal));
+            if (idEdit is null)
+            {
+                continue;
+            }
+
+            var value = ReadValue(idEdit).Trim();
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add((row, value));
+            }
+        }
+
+        return result;
     }
 
     private async Task<AutomationElement?> WaitForItemGridRowAsync(AutomationElement itemInfoWindow, string productId, TimeSpan timeout)

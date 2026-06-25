@@ -23,4 +23,40 @@ public static class SipMarking
         var code = (pid ?? "").Trim().ToUpperInvariant();
         return !NoMarkSuffixes.Any(s => code.EndsWith(s, StringComparison.Ordinal));
     }
+
+    // 검색 PID(searchedPid) 기준으로 그리드 한 행(rowProductId)의 Marking을 만든다.
+    // base(==PID): Compute(PID). 변형(PID + "-" + MFGID): "{MFGID 3-4자 용량} " + Compute(PID).
+    // PID 소속이 아니거나(끝이 '-'가 아닌 00/0J/0S 등) PID가 예외면 "" → 건드리지 않음.
+    public static string RowMarking(string searchedPid, string rowProductId)
+    {
+        var pid = (searchedPid ?? "").Trim().ToUpperInvariant();
+        var rowId = (rowProductId ?? "").Trim().ToUpperInvariant();
+        if (!ShouldMark(pid))
+        {
+            return "";
+        }
+
+        var baseMarking = Compute(pid);
+        if (string.IsNullOrEmpty(baseMarking))
+        {
+            return "";
+        }
+
+        if (rowId == pid)
+        {
+            return baseMarking;
+        }
+
+        var prefix = pid + "-";
+        if (rowId.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            var mfgid = rowId[prefix.Length..];
+            if (mfgid.Length >= 4)
+            {
+                return $"{mfgid.Substring(2, 2)} {baseMarking}";
+            }
+        }
+
+        return "";
+    }
 }

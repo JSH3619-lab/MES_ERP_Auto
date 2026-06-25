@@ -14,7 +14,8 @@
 | `NativeMessage.cs` | 완료/실패 네이티브 알림창(P/Invoke, 최전면 고정) |
 | `ConfigStore.cs`, `SecretProtector.cs` | JSON 설정 저장/로드와 로컬 암호 보호 |
 | `SafetyGuard.cs` | 저장 외 등록/삭제/확정/승인/적용 계열 위험 버튼 차단 |
-| `PartClassifier.cs`, `BinRules.cs` | 파트 분류와 DRAM/SSD별 BIN 목표 행 계산(`BinIdResolver`/`DramBinRules`/`SsdBinRules` 클래스를 한 파일에 통합) |
+| `PartClassifier.cs`, `BinRules.cs` | 파트 분류(DRAM/SSD/SIP)와 BIN 목표 행 계산(`BinIdResolver`/`DramBinRules`/`SsdBinRules`/`SipBinRules`) |
+| `SipMarking.cs` | SIP Marking 파생(PID 기반 + MFGID 변형, 행별 `RowMarking`) |
 | `PartListParser.cs`, `CsvFiles.cs` | GUI/CSV 입력 Part 목록 파싱 |
 | `ResultWorkbook.cs` | 결과 xlsx 생성 |
 | `UiDump.cs`, `ScreenshotService.cs`, `LoggerSetup.cs` | 진단 산출물과 로깅 |
@@ -58,15 +59,17 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 파트별로 `품목명` 입력 후 조회하고, `PartClassifier` 결과에 따라 BIN 관리/TurnKey/AssemblyIn/불량창고 셀을 비교한다. 미존재 Part는 `[971001]품목 코드 이(가) 존재하지 않습니다.` 경고와 `고객사PartID PopUp`을 닫고 SKIPPED 처리한다.
 
-분류 prefix는 DRAM Module=`RM/TM/BM/CM/ZM`, DRAM Comp=`RC/TC/BC/CC/ZC`, SSD=`DA/DE`다. SSD 품목정보는 BIN 관리/Turn Key/불량창고만 처리하고 조립입고 공정이동여부는 건드리지 않는다.
+분류 prefix는 DRAM Module=`RM/TM/BM/CM/ZM`, DRAM Comp=`RC/TC/BC/CC/ZC`, SSD=`DA/DE`, SIP=`SN`이다. SSD 품목정보는 BIN 관리/Turn Key/불량창고만 처리하고 조립입고 공정이동여부는 건드리지 않는다.
+
+SIP는 BIN/TurnKey/조립입고/불량창고(=DRAM Module과 동일)에 더해 `Marking` 셀을 채운다. base 행은 PID 파생값(`SipMarking.Compute`), 조회 시 함께 뜨는 MFGID 변형 행(`품목ID`가 `PID + "-"`로 시작)은 `"{MFGID 용량} {base}"`로 **Marking만** 입력하고 다른 셀은 건드리지 않는다. `PID + "-"` 앵커로 `...0J/0S/00` 같은 다른 파트는 배제. PID 끝 2글자가 `0S/0G/0J/0K`면 Marking 생략.
 
 ## 품목별 BIN 정보 관리
 
-`BinIdResolver`가 Part No에서 분류, 공정 키, BIN ID 이름, 필요한 BIN 행 목록을 계산한다. DRAM 규칙(`DramBinRules`)과 SSD 규칙(`SsdBinRules`)은 `BinRules.cs` 한 파일에 클래스로 함께 둔다.
+`BinIdResolver`가 Part No에서 분류, 공정 키, BIN ID 이름, 필요한 BIN 행 목록을 계산한다. DRAM(`DramBinRules`)·SSD(`SsdBinRules`)·SIP(`SipBinRules`) 규칙은 `BinRules.cs` 한 파일에 클래스로 함께 둔다.
 
 - BIN-only 실행은 `품목 코드` 팝업으로 대상 품목을 먼저 선택한다.
 - 기존 BIN 행이 목표 행 수 이상이면 신규 행추가 없이 변경 없음으로 처리한다.
-- 신규 행이 필요하면 행 추가 후 실제 `BIN 정보 선택` 행이 생겼는지 확인하고 셀을 채운다. SSD B0는 2행, SSD R0는 3행을 순서대로 처리한다.
+- 신규 행이 필요하면 행 추가 후 실제 `BIN 정보 선택` 행이 생겼는지 확인하고 셀을 채운다. SSD B0는 2행, SSD R0는 3행, SIP는 공정 M030 2행(BIN ID=`SIP_Normal_{용량}_AIO`, 1행 Bin완료여부는 미설정)을 순서대로 처리한다.
 - GUI 실행은 실제 저장 모드로 고정되며 정상 저장은 `Ctrl+S`로 수행한다.
 
 ## 저장 안전장치
@@ -79,7 +82,7 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 결과는 `ResultWorkbook`이 `output/result_<timestamp>.xlsx`로 저장한다.
 
-- `품목정보관리` 시트: 품목, 분류, BIN 관리, Turn Key, 조립입고, 불량창고, 저장, 상태, 메시지, 처리일시
+- `품목정보관리` 시트: 품목, 분류, BIN 관리, Turn Key, 조립입고, 불량창고, Marking, 저장, 상태, 메시지, 처리일시 (SIP는 base + MFGID 변형 행이 각각 기록됨)
 - `BIN 정보관리` 시트: 품목, 분류, 공정명, BIN Type, Retest No, BIN 완료여부, Retest TH, BIN ID, 저장, 상태, 메시지, 처리일시
 
 ## DPI 기준
