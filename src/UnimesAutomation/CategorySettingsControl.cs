@@ -16,6 +16,10 @@ public sealed class CategorySettingsControl : UserControl
         BuildItemGrid();
         BuildBinGrid();
 
+        // 콤보 목록에 없는 값(예: SIP 1번행 Bin완료여부 Blank)이 와도 오류 대화상자 없이 그대로 둔다.
+        _item.DataError += (_, e) => e.ThrowException = false;
+        _bin.DataError += (_, e) => e.ThrowException = false;
+
         var binHeader = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 28, FlowDirection = FlowDirection.LeftToRight };
         binHeader.Controls.Add(new Label { Text = "BIN 정보관리", AutoSize = true });
         var add = new Button { Text = "행 추가", AutoSize = true };

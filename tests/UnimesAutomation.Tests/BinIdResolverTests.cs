@@ -98,4 +98,41 @@ public class BinIdResolverTests
     {
         Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
     }
+
+    [Fact]
+    public void Sip_resolves_two_rows_with_same_binid()
+    {
+        var cfg = RootConfig.CreateDefault();
+
+        var target = BinIdResolver.Resolve("SNAKGD8J0B-HBRV310J", cfg); // KG=1Tb, 끝 0J(Marking 예외라도 BIN은 동일)
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Sip, target!.Class);
+        Assert.Equal(2, target.Rows.Count);
+        Assert.All(target.Rows, r => Assert.Equal("M030", r.ProcessSearchKey));
+        Assert.Equal(["SIP_Normal_1Tb_AIO", "SIP_Normal_1Tb_AIO"], target.Rows.Select(r => r.BinIdName).ToArray());
+        Assert.Equal(["Normal-1", "Normal-2"], target.Rows.Select(r => r.Row.BinType).ToArray());
+        Assert.Equal(["0", "1"], target.Rows.Select(r => r.Row.RetestNo).ToArray());
+        Assert.Equal(["", "Y"], target.Rows.Select(r => r.Row.BinComplete).ToArray()); // 1행 Blank(미설정), 2행 Y
+        Assert.Equal(["Normal", "Y"], target.Rows.Select(r => r.Row.RetestTh).ToArray());
+    }
+
+    [Theory]
+    [InlineData("SNA8GD8J0B-HBRV310J", "SIP_Normal_8Gb_AIO")]  // 4-5='8G'
+    [InlineData("SNAAGD8J0B-HBRV310J", "SIP_Normal_16Gb_AIO")] // 4-5='AG'
+    [InlineData("SNAVGD8J0B-HBRV310J", "SIP_Normal_8Tb_AIO")]  // 4-5='VG'
+    public void Sip_resolves_capacity_from_fourth_and_fifth(string part, string expected)
+    {
+        var target = BinIdResolver.Resolve(part, RootConfig.CreateDefault());
+
+        Assert.NotNull(target);
+        Assert.Equal(expected, target!.Rows[0].BinIdName);
+    }
+
+    [Theory]
+    [InlineData("SNAZZD8J0B-HBRV310J")] // 미지원 용량코드 ZZ
+    public void Sip_unresolvable_returns_null(string part)
+    {
+        Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
+    }
 }

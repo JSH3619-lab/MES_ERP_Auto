@@ -1018,6 +1018,13 @@ public sealed partial class UnimesApp
 
     private void SetBinComboCell(AutomationElement row, string columnName, string targetValue, string? expectedStoredValue = null)
     {
+        // 빈 목표값은 '이 셀은 건드리지 않음'(예: SIP 1번행 Bin완료여부 Blank). 현재값 유지.
+        if (string.IsNullOrWhiteSpace(targetValue))
+        {
+            _logger.Info($"BIN cell skipped (blank target). column='{columnName}'");
+            return;
+        }
+
         var combo = FindGridCell(row, columnName, ControlType.ComboBox)
             ?? throw new InvalidOperationException($"BIN {columnName} 셀을 찾지 못했습니다.");
 

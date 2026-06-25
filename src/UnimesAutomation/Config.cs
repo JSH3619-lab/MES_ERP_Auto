@@ -37,6 +37,7 @@ public sealed class RootConfig
         PartClass.Module => Categories.DramModule.ItemInfo,
         PartClass.Comp => Categories.DramComp.ItemInfo,
         PartClass.Ssd => Categories.Ssd.ItemInfo,
+        PartClass.Sip => Categories.Sip.ItemInfo,
         _ => null
     };
 
@@ -189,7 +190,7 @@ public sealed class OptionsConfig
     public List<string> BinTypes { get; set; } = ["Normal-1", "Normal-2", "Special-1"];
 
     [JsonPropertyName("retestThs")]
-    public List<string> RetestThs { get; set; } = ["H", "Normal", "L"];
+    public List<string> RetestThs { get; set; } = ["H", "Normal", "L", "Y"];
 
     [JsonPropertyName("binCompletes")]
     public List<string> BinCompletes { get; set; } = ["Y", "N"];
@@ -205,6 +206,9 @@ public sealed class CategoriesConfig
 
     [JsonPropertyName("ssd")]
     public SsdCategoryConfig Ssd { get; set; } = SsdCategoryConfig.Default();
+
+    [JsonPropertyName("sip")]
+    public CategoryConfig Sip { get; set; } = CategoryConfig.DefaultSip();
 }
 
 public sealed class CategoryConfig
@@ -225,6 +229,22 @@ public sealed class CategoryConfig
     {
         ItemInfo = new ItemInfoValues { DefectWarehouse = "COMPONENT 폐기창고" },
         BinInfo = new BinInfoValues { ProcessSearchKey = "C010", Rows = [BinRowConfig.Default("C010")] }
+    };
+
+    // SIP 품목정보는 DRAM Module과 동일(Y/N/Y/제품 폐기창고).
+    // BIN: 공정 M030(제품 Bin sorting) 2행. 1행 Bin완료여부는 미설정(Blank), 2행 Y. BIN ID는 용량으로 산출.
+    public static CategoryConfig DefaultSip() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "제품 폐기창고" },
+        BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M030",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M030", BinType = "Normal-1", RetestNo = "0", BinComplete = "", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M030", BinType = "Normal-2", RetestNo = "1", BinComplete = "Y", RetestTh = "Y" }
+            ]
+        }
     };
 }
 

@@ -23,6 +23,7 @@ public static class BinIdResolver
                 code,
                 config.Categories.DramModule.BinInfo,
                 config.Categories.DramComp.BinInfo),
+            PartClass.Sip => SipBinRules.Resolve(code, config.Categories.Sip),
             _ => null
         };
     }
@@ -166,4 +167,60 @@ public static class DramBinRules
 
     private static string ProcessKey(BinRowConfig row, string fallback)
         => string.IsNullOrWhiteSpace(row.ProcessName) ? fallback : row.ProcessName;
+}
+
+public static class SipBinRules
+{
+    // 용량코드(파트 4-5번째) -> 용량. SSD와 위치는 같고 표만 SIP용.
+    private static readonly Dictionary<string, string> Density = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["8G"] = "8Gb",
+        ["AG"] = "16Gb",
+        ["BG"] = "32Gb",
+        ["CG"] = "64Gb",
+        ["DG"] = "128Gb",
+        ["FG"] = "256Gb",
+        ["HG"] = "512Gb",
+        ["KG"] = "1Tb",
+        ["MG"] = "2Tb",
+        ["UG"] = "4Tb",
+        ["VG"] = "8Tb"
+    };
+
+    public static BinInfoTarget? Resolve(string partNo, CategoryConfig config)
+    {
+        var code = (partNo ?? "").Trim();
+        if (PartClassifier.Classify(code) != PartClass.Sip)
+        {
+            return null;
+        }
+
+        if (code.Length < 5 || !Density.TryGetValue(code.Substring(3, 2), out var capacity))
+        {
+            return null;
+        }
+
+        var binId = $"SIP_Normal_{capacity}_AIO";
+        return BuildTarget(config.BinInfo, CategoryConfig.DefaultSip().BinInfo, binId);
+    }
+
+    // 모든 행이 같은 BIN ID. 행 설정(공정/타입/완료여부/TH)은 config(없으면 기본)에서 가져온다.
+    private static BinInfoTarget BuildTarget(BinInfoValues configured, BinInfoValues defaults, string binId)
+    {
+        var sourceRows = configured.Rows.Count > 0 ? configured.Rows : defaults.Rows;
+        var rows = new List<BinInfoRowTarget>();
+        foreach (var src in sourceRows)
+        {
+            var row = src.Clone();
+            var processKey = string.IsNullOrWhiteSpace(row.ProcessName) ? configured.ProcessSearchKey : row.ProcessName;
+            if (string.IsNullOrWhiteSpace(processKey))
+            {
+                processKey = defaults.ProcessSearchKey;
+            }
+
+            rows.Add(new BinInfoRowTarget(processKey, binId, row));
+        }
+
+        return new BinInfoTarget(PartClass.Sip, rows);
+    }
 }

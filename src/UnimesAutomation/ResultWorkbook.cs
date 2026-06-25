@@ -19,7 +19,7 @@ public static class ResultWorkbook
         if (itemResults.Count > 0)
         {
             var ws = workbook.Worksheets.Add("품목정보관리");
-            string[] headers = ["품목", "분류", "BIN 관리", "Turn Key", "조립입고", "불량창고", "저장", "상태", "메시지", "처리일시"];
+            string[] headers = ["품목", "분류", "BIN 관리", "Turn Key", "조립입고", "불량창고", "Marking", "저장", "상태", "메시지", "처리일시"];
             for (var c = 0; c < headers.Length; c++)
             {
                 ws.Cell(1, c + 1).Value = headers[c];
@@ -34,10 +34,11 @@ public static class ResultWorkbook
                 ws.Cell(row, 4).Value = r.TurnKey;
                 ws.Cell(row, 5).Value = r.AssemblyIn;
                 ws.Cell(row, 6).Value = r.DefectWarehouse;
-                ws.Cell(row, 7).Value = r.Saved;
-                ws.Cell(row, 8).Value = r.Status;
-                ws.Cell(row, 9).Value = r.Message;
-                ws.Cell(row, 10).Value = r.ProcessedAt.ToString("yyyy-MM-dd HH:mm:ss");
+                ws.Cell(row, 7).Value = r.Marking;
+                ws.Cell(row, 8).Value = r.Saved;
+                ws.Cell(row, 9).Value = r.Status;
+                ws.Cell(row, 10).Value = r.Message;
+                ws.Cell(row, 11).Value = r.ProcessedAt.ToString("yyyy-MM-dd HH:mm:ss");
                 row++;
             }
 

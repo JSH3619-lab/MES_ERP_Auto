@@ -71,6 +71,7 @@ public sealed class PartResult
     public string TurnKey { get; set; } = "";
     public string AssemblyIn { get; set; } = "";
     public string DefectWarehouse { get; set; } = "";
+    public string Marking { get; set; } = "";
     public string Saved { get; set; } = "";
     public string Status { get; set; } = "";
     public string Message { get; set; } = "";

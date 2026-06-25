@@ -141,7 +141,7 @@ public static class ConfigStore
     {
         AddMissing(cfg.Options.DefectWarehouses, ["제품 폐기창고", "COMPONENT 폐기창고"]);
         AddMissing(cfg.Options.BinTypes, ["Normal-1", "Normal-2", "Special-1"]);
-        AddMissing(cfg.Options.RetestThs, ["H", "Normal", "L"]);
+        AddMissing(cfg.Options.RetestThs, ["H", "Normal", "L", "Y"]);
         AddMissing(cfg.Options.BinCompletes, ["Y", "N"]);
         cfg.Categories.Ssd.ItemInfo.AssemblyIn = "";
         return cfg;

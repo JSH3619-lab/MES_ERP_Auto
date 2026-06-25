@@ -15,6 +15,7 @@ public class ResultWorkbookTests
         {
             PartNo = "RMRDAG58A1B-GPWRRWM7", Classification = "Module",
             BinManage = "Y", TurnKey = "N", AssemblyIn = "Y", DefectWarehouse = "제품 폐기창고",
+            Marking = "AKBHPA8YWW",
             Saved = "YES", Status = "OK", Message = "ok",
             ProcessedAt = new DateTime(2026, 6, 19, 10, 0, 0)
         };
@@ -43,6 +44,8 @@ public class ResultWorkbookTests
             var itemWs = wb.Worksheet("품목정보관리");
             Assert.Equal("불량창고", itemWs.Cell(1, 6).GetString());
             Assert.Equal("제품 폐기창고", itemWs.Cell(2, 6).GetString());
+            Assert.Equal("Marking", itemWs.Cell(1, 7).GetString());
+            Assert.Equal("AKBHPA8YWW", itemWs.Cell(2, 7).GetString());
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }

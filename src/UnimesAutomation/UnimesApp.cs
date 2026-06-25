@@ -403,6 +403,32 @@ public sealed partial class UnimesApp
                     }
                 }
 
+                // SIP: PID 파생 Marking을 같은 행 텍스트 셀에 입력. 예외 접미(0S/0G/0J/0K)면 생략.
+                // 저장은 아래 품목정보 Ctrl+S 1회에 함께 포함된다(별도 저장 없음).
+                if (classification == PartClass.Sip && SipMarking.ShouldMark(pid))
+                {
+                    var marking = SipMarking.Compute(pid);
+                    if (!string.IsNullOrWhiteSpace(marking))
+                    {
+                        result.Marking = marking;
+                        var action = ApplyMarkingTextCell(row, "Marking", marking, readOnlyMode);
+                        if (action == CellAction.Changed)
+                        {
+                            changeCount++;
+                            detail.Add($"Marking={marking}");
+                        }
+                        else if (action == CellAction.WouldChange)
+                        {
+                            wouldCount++;
+                            detail.Add($"Marking→{marking}");
+                        }
+                    }
+                }
+                else if (classification == PartClass.Sip)
+                {
+                    _logger.Info($"품목정보관리 SIP Marking 생략(예외 접미). part='{request.PartNo}', pid='{pid}'");
+                }
+
                 _screenshots.CaptureElement(itemInfoWindow, $"item_info_before_save_{request.PartNo}");
 
                 if (changeCount == 0 && wouldCount == 0)
@@ -694,6 +720,62 @@ public sealed partial class UnimesApp
         }
 
         throw new InvalidOperationException($"Failed to set grid cell. column='{columnName}', target='{targetValue}'");
+    }
+
+    // Marking은 자유 텍스트 셀(콤보 목록 선택 아님). ValuePattern 우선, 안 되면 더블클릭+타이핑.
+    // ⚠️ 편집모드 진입/커밋 타이밍은 실기 스모크로 확정 필요.
+    private CellAction ApplyMarkingTextCell(AutomationElement row, string columnName, string targetValue, bool readOnlyMode)
+    {
+        bool NameMatches(AutomationElement c)
+            => string.Equals(SafeRead(() => c.Current.Name) ?? "", columnName, StringComparison.Ordinal);
+
+        var cell = FindDescendants(row, ControlType.ComboBox).FirstOrDefault(NameMatches)
+                ?? FindDescendants(row, ControlType.Edit).FirstOrDefault(NameMatches)
+                ?? FindDescendants(row, null).FirstOrDefault(NameMatches)
+                ?? throw new InvalidOperationException($"Grid cell not found: column='{columnName}'");
+
+        var current = ReadValue(cell);
+        if (string.Equals(current, targetValue, StringComparison.Ordinal))
+        {
+            _logger.Info($"Marking cell already set. value='{targetValue}'");
+            return CellAction.Unchanged;
+        }
+
+        if (readOnlyMode)
+        {
+            _logger.Info($"[readOnly] Would set Marking. '{current}'->'{targetValue}'");
+            return CellAction.WouldChange;
+        }
+
+        TryFocus(cell, "Marking cell");
+        if (cell.TryGetCurrentPattern(ValuePattern.Pattern, out var raw) &&
+            raw is ValuePattern vp && !vp.Current.IsReadOnly)
+        {
+            vp.SetValue(targetValue);
+            CommitField();
+            if (string.Equals(ReadValue(cell), targetValue, StringComparison.Ordinal))
+            {
+                _logger.Info($"Marking set via ValuePattern. '{current}'->'{targetValue}'");
+                return CellAction.Changed;
+            }
+        }
+
+        // 폴백: 셀 더블클릭으로 편집모드 진입 후 타이핑(실기 관찰 동작).
+        ClickElementCenterByMouseDouble(cell);
+        Thread.Sleep(150);
+        SendKeys.SendWait("^a");
+        SendKeys.SendWait("{DELETE}");
+        SendKeys.SendWait(EscapeForSendKeys(targetValue));
+        CommitField();
+
+        var updated = ReadValue(cell);
+        if (!string.Equals(updated, targetValue, StringComparison.Ordinal))
+        {
+            _logger.Warn($"Marking did not commit. expected='{targetValue}', actual='{updated}'");
+        }
+
+        _logger.Info($"Marking set via keyboard. '{current}'->'{targetValue}'");
+        return CellAction.Changed;
     }
 
     private void CommitComboEdit(string columnName)
