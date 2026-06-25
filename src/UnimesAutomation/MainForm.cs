@@ -294,6 +294,11 @@ public sealed class MainForm : Form
 
     private void AppendLog(string line)
     {
+        if (line.Contains("[DEBUG]"))
+        {
+            return;
+        }
+
         if (_log.TextLength > 80000)
         {
             _log.Clear();

@@ -2536,7 +2536,7 @@ public sealed class UnimesApp
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Combo expand failed: {ex.Message}");
+            _logger.Debug($"Combo expand failed: {ex.Message}");
         }
     }
 
@@ -2552,7 +2552,7 @@ public sealed class UnimesApp
         }
         catch (Exception ex)
         {
-            _logger.Warn($"SelectionItemPattern.Select failed: {ex.Message}");
+            _logger.Debug($"SelectionItemPattern.Select failed: {ex.Message}");
         }
 
         try
@@ -2565,7 +2565,7 @@ public sealed class UnimesApp
         }
         catch (Exception ex)
         {
-            _logger.Warn($"InvokePattern.Invoke failed on list item: {ex.Message}");
+            _logger.Debug($"InvokePattern.Invoke failed on list item: {ex.Message}");
         }
 
         return false;
@@ -2622,7 +2622,7 @@ public sealed class UnimesApp
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Combo expand (keyboard) failed. column='{columnName}', reason={ex.Message}");
+            _logger.Debug($"Combo expand (keyboard) failed. column='{columnName}', reason={ex.Message}");
         }
 
         // ExpandCollapse가 cold 상태(편집모드 아님)로 던지면 드롭다운이 안 열린다.
@@ -4204,7 +4204,7 @@ public sealed class UnimesApp
             return;
         }
 
-        _logger.Warn($"InvokePattern unavailable. 좌표 기반 fallback 사용. reason='{reason}'");
+        _logger.Debug($"InvokePattern unavailable. 좌표 기반 fallback 사용. reason='{reason}'");
         ClickElementCenterByMouse(element);
     }
 

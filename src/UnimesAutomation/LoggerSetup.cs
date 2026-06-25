@@ -20,6 +20,9 @@ public sealed class SimpleLogger : IDisposable
 
     public void Info(string message) => Write("INFO", message);
 
+    // 예상된 UIA 패턴 미지원→폴백 같은 trace성 잡음. 파일엔 남기되 GUI 콘솔엔 표시 안 함.
+    public void Debug(string message) => Write("DEBUG", message);
+
     public void Warn(string message) => Write("WARN", message);
 
     public void Error(string message) => Write("ERROR", message);
