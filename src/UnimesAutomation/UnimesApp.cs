@@ -7,16 +7,6 @@ namespace UnimesAutomation;
 
 public sealed class UnimesApp
 {
-    private const uint MbOk = 0x00000000;
-    private const uint MbIconWarning = 0x00000030;
-    private const uint MbIconInformation = 0x00000040;
-    private const uint MbTaskModal = 0x00002000;
-    private const uint MbSetForeground = 0x00010000;
-    private const uint MbTopMost = 0x00040000;
-
-    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int ShowNativeMessageBox(IntPtr hWnd, string text, string caption, uint type);
-
     private readonly RootConfig _config;
     private readonly RuntimePaths _paths;
     private readonly SimpleLogger _logger;
@@ -1844,8 +1834,8 @@ public sealed class UnimesApp
         var title = errors > 0 || skipped > 0 ? "UNIMES 자동화 완료 - 확인 필요" : "UNIMES 자동화 완료";
         try
         {
-            var icon = errors > 0 || skipped > 0 ? MbIconWarning : MbIconInformation;
-            ShowNativeMessageBox(IntPtr.Zero, builder.ToString(), title, MbOk | icon | MbTaskModal | MbSetForeground | MbTopMost);
+            var kind = errors > 0 || skipped > 0 ? NativeMessage.Kind.Warning : NativeMessage.Kind.Information;
+            NativeMessage.Show(builder.ToString(), title, kind);
         }
         catch (Exception ex)
         {

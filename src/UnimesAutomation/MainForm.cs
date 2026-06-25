@@ -15,14 +15,6 @@ public sealed class MainForm : Form
 
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const uint MbOk = 0x00000000;
-    private const uint MbIconError = 0x00000010;
-    private const uint MbTaskModal = 0x00002000;
-    private const uint MbSetForeground = 0x00010000;
-    private const uint MbTopMost = 0x00040000;
-
-    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int ShowNativeMessageBox(IntPtr hWnd, string text, string caption, uint type);
 
     private readonly RootConfig _config;
     private readonly RuntimePaths _paths;
@@ -465,7 +457,7 @@ public sealed class MainForm : Form
 
         try
         {
-            ShowNativeMessageBox(IntPtr.Zero, message, "UNIMES 자동화 실패", MbOk | MbIconError | MbTaskModal | MbSetForeground | MbTopMost);
+            NativeMessage.Show(message, "UNIMES 자동화 실패", NativeMessage.Kind.Error);
         }
         catch
         {
