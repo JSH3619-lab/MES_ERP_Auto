@@ -1,6 +1,6 @@
 # STATUS
 
-최종 갱신: 2026-06-23
+최종 갱신: 2026-06-25
 
 ## 현재 기준점
 
@@ -38,6 +38,16 @@
 - BIN 행추가는 `Ctrl+Insert`를 우선 사용하고, 새 행이 감지되지 않을 때만 행추가 버튼 클릭 fallback을 사용한다.
 - 다음 실기 로그 분석을 위해 메뉴 이동, 품목 조회 판단, BIN 컨트롤 캐시, BIN 조회/행탐색/저장에 elapsed 로그를 남긴다.
 - README와 운영 문서를 현재 기준으로 정리했다.
+
+## 코드 정리 (리팩터) — 2026-06-25
+
+동작 변화 없음(테스트 31 그린 유지). 구 `docs/REFACTOR_PLAN.md`의 1~5를 전부 완료하고 해당 플랜 문서는 제거했다.
+
+- BIN: `BinRowConfig.Clone()` 인스턴스 메서드로 중복 제거. `BinIdResolver`/`SsdBinRules`/`DramBinRules`를 `BinRules.cs` 한 파일로 통합(클래스명 유지 → 호출부 변경 0).
+- 모델: `Models.cs` → `Config.cs`(설정)·`Results.cs`(결과/값 DTO) 분리. `RuntimePaths`/`CommandLineOptions`만 `Models.cs`에 잔류.
+- 알림창: `ShowNativeMessageBox` P/Invoke 중복을 `NativeMessage.cs`로 추출(최전면 동작 보존).
+- `UnimesApp.cs`(4,608줄) → 코어 + `.Bin`·`.Menu`·`.Dialogs` partial 분할(컴파일 시 한 타입, IL 동일, 호출부 변경 0).
+- 로깅: 예상된 UIA 패턴 미지원→폴백 5곳을 `Warn`→`Debug` 강등. `SimpleLogger.Debug` 추가, GUI 콘솔은 `[DEBUG]` 미표시(파일엔 기록). WARN은 `did not commit` 같은 실제 문제에만 남긴다.
 
 ## 검증 상태
 

@@ -7,11 +7,14 @@
 | `Program.cs` | 진입점. 인자 파싱, 설정 로드, GUI 실행 또는 `--dump-only` 실행 |
 | `MainForm.cs` | 메인 GUI. 파트 입력, 작업 범위, 실행/정지, 로그 표시 |
 | `SettingsForm.cs`, `CategorySettingsControl.cs` | 설정 편집 GUI |
-| `UnimesApp.cs` | 핵심 자동화. 창 탐색, 로그인, 팝업, 메뉴 이동, 품목정보/BIN 워크플로우 |
-| `Models.cs` | 설정 모델과 기본값 |
+| `UnimesApp.cs` (+ `.Bin`/`.Menu`/`.Dialogs` partial) | 핵심 자동화. 코어=창 탐색·로그인·UIA 헬퍼, `.Bin`=BIN 워크플로, `.Menu`=메뉴 이동, `.Dialogs`=메시지/경고창 감지 |
+| `Config.cs` | 설정 모델과 기본값(`CreateDefault`) |
+| `Results.cs` | 결과/값 DTO (`PartResult`, `BinResult`, `ItemInfoValues`, `BinInfoValues`, `BinRowConfig`, `PartRequest`) |
+| `Models.cs` | 런타임 보조 타입 (`RuntimePaths`, `CommandLineOptions`) |
+| `NativeMessage.cs` | 완료/실패 네이티브 알림창(P/Invoke, 최전면 고정) |
 | `ConfigStore.cs`, `SecretProtector.cs` | JSON 설정 저장/로드와 로컬 암호 보호 |
 | `SafetyGuard.cs` | 저장 외 등록/삭제/확정/승인/적용 계열 위험 버튼 차단 |
-| `PartClassifier.cs`, `BinIdResolver.cs`, `DramBinRules.cs`, `SsdBinRules.cs` | 파트 분류와 DRAM/SSD별 BIN 목표 행 계산 |
+| `PartClassifier.cs`, `BinRules.cs` | 파트 분류와 DRAM/SSD별 BIN 목표 행 계산(`BinIdResolver`/`DramBinRules`/`SsdBinRules` 클래스를 한 파일에 통합) |
 | `PartListParser.cs`, `CsvFiles.cs` | GUI/CSV 입력 Part 목록 파싱 |
 | `ResultWorkbook.cs` | 결과 xlsx 생성 |
 | `UiDump.cs`, `ScreenshotService.cs`, `LoggerSetup.cs` | 진단 산출물과 로깅 |
@@ -59,7 +62,7 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 ## 품목별 BIN 정보 관리
 
-`BinIdResolver`가 Part No에서 분류, 공정 키, BIN ID 이름, 필요한 BIN 행 목록을 계산한다. DRAM 규칙은 `DramBinRules`, SSD 규칙은 `SsdBinRules`에 분리되어 있다.
+`BinIdResolver`가 Part No에서 분류, 공정 키, BIN ID 이름, 필요한 BIN 행 목록을 계산한다. DRAM 규칙(`DramBinRules`)과 SSD 규칙(`SsdBinRules`)은 `BinRules.cs` 한 파일에 클래스로 함께 둔다.
 
 - BIN-only 실행은 `품목 코드` 팝업으로 대상 품목을 먼저 선택한다.
 - 기존 BIN 행이 목표 행 수 이상이면 신규 행추가 없이 변경 없음으로 처리한다.

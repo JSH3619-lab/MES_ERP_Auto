@@ -25,12 +25,12 @@ dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --no-laun
 dotnet run --project .\src\UnimesAutomation\UnimesAutomation.csproj -- --dump-only --no-launch  # UI 트리만 덤프
 ```
 
-`appsettings.json`이 없으면 코드 기본값(`Models.cs`의 `CreateDefault`)을 쓴다.
+`appsettings.json`이 없으면 코드 기본값(`Config.cs`의 `CreateDefault`)을 쓴다.
 
 ## 코드 핵심
 
-- 진입: `src/UnimesAutomation/Program.cs` → 오케스트레이션: `UnimesApp.cs`(거의 모든 로직).
-- 설정 모델: `Models.cs` / 안전가드: `SafetyGuard.cs` / 파트 분류: `PartClassifier.cs`.
+- 진입: `src/UnimesAutomation/Program.cs` → 오케스트레이션: `UnimesApp.cs`(+ `.Bin`/`.Menu`/`.Dialogs` partial 분할, 거의 모든 로직).
+- 설정 모델: `Config.cs`(설정)·`Results.cs`(결과 DTO) / 안전가드: `SafetyGuard.cs` / 파트 분류·BIN 규칙: `PartClassifier.cs`·`BinRules.cs`.
 
 ## 서브 문서 (상세)
 

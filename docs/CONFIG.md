@@ -1,6 +1,6 @@
 # 설정 (`appsettings.json`)
 
-`appsettings.json`이 있으면 그걸, 없으면 `Models.cs`의 `CreateDefault()` 기본값을 사용한다.
+`appsettings.json`이 있으면 그걸, 없으면 `Config.cs`의 `CreateDefault()` 기본값을 사용한다.
 예시는 `appsettings.example.json`. `--config <path>`로 다른 파일 지정 가능.
 
 ## app
