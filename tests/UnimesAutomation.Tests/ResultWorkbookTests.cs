@@ -51,6 +51,25 @@ public class ResultWorkbookTests
     }
 
     [Fact]
+    public void Write_uppercases_part_name()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"unimes_xlsx_{Guid.NewGuid():N}");
+        var item = new PartResult
+        {
+            PartNo = "snakgd8j0b-hzra81-ap4gf0t", Classification = "Sip", Marking = "4G AKBHZA8YWW",
+            Saved = "YES", Status = "OK", Message = "변경 저장: Marking=4G AKBHZA8YWW", ProcessedAt = DateTime.Now
+        };
+        try
+        {
+            var path = ResultWorkbook.Write(dir, "tsUpper", [item], []);
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("품목정보관리");
+            Assert.Equal("SNAKGD8J0B-HZRA81-AP4GF0T", ws.Cell(2, 1).GetString());
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Write_bin_only_omits_item_sheet()
     {
         var dir = Path.Combine(Path.GetTempPath(), $"unimes_xlsx_{Guid.NewGuid():N}");

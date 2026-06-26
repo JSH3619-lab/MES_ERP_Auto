@@ -28,7 +28,7 @@ public static class ResultWorkbook
             var row = 2;
             foreach (var r in itemResults)
             {
-                ws.Cell(row, 1).Value = r.PartNo;
+                ws.Cell(row, 1).Value = r.PartNo.ToUpperInvariant();
                 ws.Cell(row, 2).Value = r.Classification;
                 ws.Cell(row, 3).Value = r.BinManage;
                 ws.Cell(row, 4).Value = r.TurnKey;
@@ -57,7 +57,7 @@ public static class ResultWorkbook
             var row = 2;
             foreach (var r in binResults)
             {
-                ws.Cell(row, 1).Value = r.PartNo;
+                ws.Cell(row, 1).Value = r.PartNo.ToUpperInvariant();
                 ws.Cell(row, 2).Value = r.Classification;
                 ws.Cell(row, 3).Value = r.ProcessName;
                 ws.Cell(row, 4).Value = r.BinType;

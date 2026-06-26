@@ -444,15 +444,14 @@ public sealed partial class UnimesApp
 
                         var vAction = ApplyMarkingTextCell(variantRow, "Marking", vMarking, readOnlyMode);
                         sipVariants.Add((rowId, vMarking, vAction));
+                        // 변형 마킹은 각 변형 행이 따로 기록하므로 base 메시지엔 넣지 않는다(폭주 방지). 저장 트리거용 카운트만 올림.
                         if (vAction == CellAction.Changed)
                         {
                             changeCount++;
-                            detail.Add($"Marking[{rowId}]={vMarking}");
                         }
                         else if (vAction == CellAction.WouldChange)
                         {
                             wouldCount++;
-                            detail.Add($"Marking[{rowId}]→{vMarking}");
                         }
                     }
                 }
@@ -495,14 +494,21 @@ public sealed partial class UnimesApp
                 // SIP 변형 행도 결과에 기록(품목ID + Marking). 저장은 base와 같은 Ctrl+S라 상태 공유.
                 foreach (var v in sipVariants)
                 {
+                    var vSaved = v.Action == CellAction.Unchanged ? "UNCHANGED" : result.Saved;
+                    var vMessage = vSaved switch
+                    {
+                        "UNCHANGED" => "Marking 이미 일치(변경 없음).",
+                        "YES" => $"변경 저장: Marking={v.Marking}",
+                        _ => $"Marking={v.Marking} ({result.Status})"
+                    };
                     results.Add(new PartResult
                     {
                         PartNo = v.RowId,
                         Classification = classification.ToString(),
                         Marking = v.Marking,
-                        Saved = v.Action == CellAction.Unchanged ? "UNCHANGED" : result.Saved,
+                        Saved = vSaved,
                         Status = result.Status,
-                        Message = "MFGID Marking",
+                        Message = vMessage,
                         ProcessedAt = DateTime.Now
                     });
                 }
