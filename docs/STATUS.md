@@ -51,7 +51,7 @@
 
 ## SIP 분류 추가 — 2026-06-25
 
-신규 분류 SIP(prefix `SN`). DRAM/SSD와 같은 워크플로 재사용, 규칙만 추가. 설계: `docs/superpowers/specs/2026-06-25-sip-item-info-marking-design.md`.
+신규 분류 SIP(prefix `SN`). DRAM/SSD와 같은 워크플로 재사용, 규칙만 추가. 설계: `docs/sip-design.md`.
 
 - 품목정보관리: BIN/TurnKey/조립입고/불량창고 = Y/N/Y/제품폐기창고(DRAM MDL 동일) + `Marking`.
   - base Marking: PID 파생 `AK…A8YWW`. 끝 2글자 `0S/0G/0J/0K`면 생략.

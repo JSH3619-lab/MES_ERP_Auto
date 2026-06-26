@@ -1068,13 +1068,6 @@ public sealed partial class UnimesApp
             return path;
         }
 
-        var examplePath = Path.Combine(_paths.RootDirectory, "input_parts.example.csv");
-        if (File.Exists(examplePath))
-        {
-            _logger.Warn($"input_parts.csv not found. Using example input for normal-flow test. path='{examplePath}'");
-            return examplePath;
-        }
-
         throw new FileNotFoundException("Part input file was not found.", path);
     }
 

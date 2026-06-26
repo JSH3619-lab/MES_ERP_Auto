@@ -51,7 +51,7 @@ dist/UnimesAutomation.exe
 ## 실행
 
 ```powershell
-.\run_unimes_automation.cmd
+.\dist\UnimesAutomation.exe
 ```
 
 개발 중 직접 실행:
