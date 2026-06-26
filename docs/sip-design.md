@@ -33,20 +33,21 @@ PID 조회 시 그리드에 base 1행 + MFGID 변형 N행이 함께 뜬다. 각 
 `-` 앵커가 핵심 — `...810J`/`...810S`/`...8100`(더미)처럼 P 뒤가 `-`가 아닌 행은 **다른 파트라 배제**. 그 행들의 MFGID도 같이 배제. 다량 검색에서 예외 PID가 섞여도 행 단위로 정확히 갈린다.
 
 ### 행별 Marking
-- base(`== P`): `Compute(P)` (기존). 4셀(Y/N/Y/창고)도 base에만.
-- 변형(`P + "-" + MFGID`): `"{MFGID 3-4자 용량} " + Compute(P)`. **Marking만**, 다른 셀 미터치.
+- base(`== P`): `Compute(P)` (기존). 4셀(BIN관리/TurnKey/조립입고/창고 = Y/N/Y/창고)도 base에만.
+- 변형(`P + "-" + MFGID`): `"{MFGID 3-4자 용량} " + Compute(P)` Marking + **BIN관리/TurnKey/조립입고 = N**.
+  - N을 안 넣고 블랭크로 두면 Marking 저장 시 `[970029]` 같은 검증 경고가 떠 저장이 거부된다. 불량창고는 변형 행에 미입력(블랭크).
 - `SipMarking.RowMarking(P, 행품목ID)`: 위 규칙 + 예외(P가 0S/0G/0J/0K면 "")를 한 함수로. `""`면 그 행 건드리지 않음.
 
 ### 구현
 - `SipMarking.RowMarking` (순수, 실물 23행으로 테스트).
 - `FindItemGridRowsStartingWith(window, P + "-")`: 변형 행 열거(품목ID Edit 값으로 필터).
-- 워크플로: base Marking 직후, 변형 행 루프 → 각 행 `ApplyMarkingTextCell`. 저장은 품목정보 Ctrl+S 1회에 포함.
-- 변형 행도 `PartResult`로 결과에 기록(품목ID + Marking) → result.xlsx 품목정보관리 시트에 base + 변형 각 행.
+- 워크플로: base Marking 직후, 변형 행 루프 → 각 행 BIN관리/TurnKey/조립입고 = N(`ApplyComboCell`) + `ApplyMarkingTextCell`. 저장은 품목정보 Ctrl+S 1회에 포함.
+- 변형 행도 `PartResult`로 결과에 기록(품목ID + N/N/N + Marking) → result.xlsx 품목정보관리 시트에 base + 변형 각 행.
 - 폐기: MFGID 구조 규칙(AP/TP·빈코드 A~F·접미 00/0T·상위빈) — 행이 이미 존재해 **용량만** 필요.
 
 ### 검증
 - `SipMarkingTests.RowMarking_*`: base/AP/TP 변형, 더미·0J·0S 배제, 예외 PID.
-- 실기 스모크: 13행 조회 시 base + 12변형 Marking, 0J/0S 행 미터치.
+- 실기 스모크: 13행 조회 시 base + 12변형(N/N/N + Marking), 0J/0S 행 미터치. 실기 저장 성공 확인(2026-06-26, HZRV32/DZRV32).
 
 ## SIP 품목별 BIN 정보 관리 (추가 구현 완료)
 

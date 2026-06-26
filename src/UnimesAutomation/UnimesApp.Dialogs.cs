@@ -115,6 +115,80 @@ public sealed partial class UnimesApp
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "";
     }
 
+    // 정상 플로우와 무관한 팝업(작은 owned 창 + 확인/OK 버튼 + 메시지 텍스트)을 감지해 닫고 내용을 돌려준다.
+    // 팝업이 없어야 하는 지점(예: 저장 직후)에서만 호출한다 — 예상 팝업과 구분하지 않기 때문.
+    // 폴링은 700ms로 짧게: 검증 경고는 Ctrl+S 직후 거의 즉시 뜨므로 성공 케이스 지연을 최소화한다.
+    private async Task<string?> DetectUnexpectedDialogAsync()
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(700);
+        var dialog = FindOwnedDialog(IsUnexpectedConfirmPopup);
+        while (dialog is null && DateTime.UtcNow < deadline)
+        {
+            await DelayAsync(100);
+            dialog = FindOwnedDialog(IsUnexpectedConfirmPopup);
+        }
+
+        if (dialog is null)
+        {
+            return null;
+        }
+
+        var message = ReadMessageText(dialog);
+        var confirm = FindButtonByAnyName(dialog, ["확인", "OK"]);
+        if (confirm is not null)
+        {
+            ClickElement(confirm, "예상치 못한 팝업 확인");
+        }
+
+        return string.IsNullOrWhiteSpace(message) ? "(빈 메시지 팝업)" : message;
+    }
+
+    private bool IsUnexpectedConfirmPopup(AutomationElement window)
+    {
+        return IsSmallPopupCandidate(window)
+            && FindButtonByAnyName(window, ["확인", "OK"]) is not null
+            && !string.IsNullOrWhiteSpace(ReadMessageText(window));
+    }
+
+    private AutomationElement? FindOwnedDialog(Func<AutomationElement, bool> predicate)
+    {
+        foreach (var window in FindTopLevelWindows())
+        {
+            if (!IsUnimesCandidate(window))
+            {
+                continue;
+            }
+
+            if (IsMainShellWindow(window))
+            {
+                foreach (var child in FindDirectChildWindows(window))
+                {
+                    if (predicate(child))
+                    {
+                        return child;
+                    }
+                }
+
+                continue;
+            }
+
+            if (predicate(window))
+            {
+                return window;
+            }
+
+            foreach (var child in FindDirectChildWindows(window))
+            {
+                if (predicate(child))
+                {
+                    return child;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private AutomationElement? FindByAutomationId(AutomationElement root, string automationId)
     {
         try

@@ -1,6 +1,6 @@
 # STATUS
 
-최종 갱신: 2026-06-25
+최종 갱신: 2026-06-26
 
 ## 현재 기준점
 
@@ -12,6 +12,15 @@
   - 금지: `Application.SetHighDpiMode(HighDpiMode.PerMonitorV2)` 런타임 호출 재시도 금지.
 - GUI 실행은 실제 저장 모드로 고정한다.
 - `SafetyGuard`는 유지하며, 저장 외 위험 버튼(`등록/삭제/확정/승인/적용`)을 계속 차단한다.
+
+## 최근 반영 — 2026-06-26
+
+- **엑셀 드래그앤드랍 import**: PART NO 입력칸에 `.xlsx`를 드롭하면 `품목코드` 열을 자동 탐색해 PID를 추출·채운다. (`ExcelPartReader` → `PartListParser.FromCodes`)
+  - 분류 실패(입고 `Z4`·노이즈) 제외 → 더미(PID 끝 `00`) 제외 → PID 단위 중복 제거. 타이핑 입력(`Parse`)·MES 타이핑 경로는 불변.
+  - 관리자 권한 실행 시 드롭이 UIPI에 막히지 않도록 `ChangeWindowMessageFilterEx`로 드롭 메시지 허용(`MainForm.OnShown`).
+- **SSD BIN 규칙 개정**: 종단 `B0/R0` 분기 → Special Code1(대시 제외 18번째: `B/Z/X/0`=2행, `R/Y/W`=3행) + PID 끝 `00`=더미. (`PartClassifier.IsDummy` 공용화)
+- **SIP MFGID 저장 수정**: 변형 행에 BIN관리/TurnKey/조립입고 = N 입력(전엔 Marking만 → 블랭크라 `[970029]` 검증 경고로 저장 거부). result.xlsx에도 N/N/N 기록. 실기 저장 성공 확인.
+- **저장 후 예상치 못한 팝업 감지 → 중단**: 품목정보 저장(Ctrl+S) 후 정상 플로우와 무관한 확인 팝업(작은 owned 창+확인 버튼+텍스트)을 700ms 폴링으로 감지 → 내용 ERROR 로그 + 확인 닫기 + `_abortReason`으로 **전체 런 중단**(BIN skip). 전수 그리드 재스캔(느림)은 도입 안 함. (`DetectUnexpectedDialogAsync`)
 
 ## 최근 반영 내용
 
@@ -55,7 +64,7 @@
 
 - 품목정보관리: BIN/TurnKey/조립입고/불량창고 = Y/N/Y/제품폐기창고(DRAM MDL 동일) + `Marking`.
   - base Marking: PID 파생 `AK…A8YWW`. 끝 2글자 `0S/0G/0J/0K`면 생략.
-  - **MFGID 변형**: PID 조회 시 그리드에 base + 변형 N행이 함께 뜸. `품목ID`가 `PID + "-"`로 시작하는 행에 `"{MFGID 용량} {base}"` Marking만 입력(다른 셀 미터치). `-` 앵커로 `…0J/0S/00`(다른 파트·더미) 배제. 변형 행도 result.xlsx에 각각 기록.
+  - **MFGID 변형**: PID 조회 시 그리드에 base + 변형 N행이 함께 뜸. `품목ID`가 `PID + "-"`로 시작하는 행에 BIN관리/TurnKey/조립입고 = N + `"{MFGID 용량} {base}"` Marking 입력(N을 안 넣으면 `[970029]` 검증 경고로 저장 거부). `-` 앵커로 `…0J/0S/00`(다른 파트·더미) 배제. 변형 행도 result.xlsx에 N/N/N + Marking 기록.
 - 품목별 BIN 정보 관리: 공정 M030 2행, BIN ID=`SIP_Normal_{용량}_AIO`(용량=파트 4–5자), 1행 Bin완료여부 미설정·2행 Y, Retest TH Normal·Y.
 - 설정 SIP 탭, Marking 셀은 ValuePattern→더블클릭 폴백.
 - 실기 확인: 품목정보+Marking(base+변형) 동작 확인됨. BIN 2행은 스모크 단계.
@@ -72,7 +81,7 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 현재 단위 테스트 기준:
 
-- 55개 통과 (DRAM/SSD/SIP 분류 + Marking/BIN 규칙 + 결과 워크북)
+- 73개 통과 (DRAM/SSD/SIP 분류 + Marking/BIN 규칙 + 결과 워크북 + 엑셀 import/추출)
 - 실패 0개
 
 ## 핵심 동작

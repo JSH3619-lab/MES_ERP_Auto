@@ -35,6 +35,9 @@ public sealed partial class UnimesApp
 
     private CancellationToken _cancel;
 
+    // 정상 플로우와 무관한 팝업(예: 저장 검증 경고)을 감지하면 사유를 담고 전체 런을 중단한다.
+    private string? _abortReason;
+
     private void ThrowIfCancellationRequested(string context)
     {
         if (!_cancel.IsCancellationRequested)
@@ -180,6 +183,7 @@ public sealed partial class UnimesApp
         if (_config.Workflow.Enabled)
         {
             ThrowIfCancellationRequested("워크플로우 시작 전");
+            _abortReason = null;
             var scope = _config.Workflow.RuntimeWorkScope;
             List<PartRequest> binParts = _config.Workflow.RuntimePartRequests.ToList();
             var itemResults = new List<PartResult>();
@@ -195,9 +199,14 @@ public sealed partial class UnimesApp
                 }
             }
 
-            if (scope == WorkScope.BinInfo || scope == WorkScope.Both)
+            if (_abortReason is null && (scope == WorkScope.BinInfo || scope == WorkScope.Both))
             {
                 binResults = await RunBinInfoWorkflowAsync(mainWindow, binParts);
+            }
+
+            if (_abortReason is not null)
+            {
+                _logger.Error($"예상치 못한 팝업으로 워크플로우 중단됨. {_abortReason}");
             }
 
             if (itemResults.Count > 0 || binResults.Count > 0)
@@ -429,7 +438,7 @@ public sealed partial class UnimesApp
                     _logger.Info($"품목정보관리 SIP Marking 생략(예외 접미). part='{request.PartNo}', pid='{pid}'");
                 }
 
-                // SIP MFGID 변형 행: 품목ID가 'pid + "-"' 로 시작하는 모든 행에 Marking만 입력(다른 셀 미터치).
+                // SIP MFGID 변형 행: 품목ID가 'pid + "-"' 로 시작하는 모든 행을 처리.
                 // 'pid + "-"' 앵커라 ...0J/0S/00 같은 다른 PID 행은 배제된다. 저장은 아래 Ctrl+S 1회에 함께 포함.
                 var sipVariants = new List<(string RowId, string Marking, CellAction Action)>();
                 if (classification == PartClass.Sip)
@@ -440,6 +449,21 @@ public sealed partial class UnimesApp
                         if (string.IsNullOrEmpty(vMarking))
                         {
                             continue;
+                        }
+
+                        // MFGID 행은 BIN관리/TurnKey/조립입고를 N으로 채워야 한다. 블랭크로 두면 Marking 저장 시
+                        // [970029] 같은 검증 경고가 떠서 저장이 거부된다.
+                        foreach (var nColumn in new[] { "BIN 관리", "Turn Key", "조립입고 공정이동여부" })
+                        {
+                            var nAction = ApplyComboCell(variantRow, nColumn, "N", readOnlyMode);
+                            if (nAction == CellAction.Changed)
+                            {
+                                changeCount++;
+                            }
+                            else if (nAction == CellAction.WouldChange)
+                            {
+                                wouldCount++;
+                            }
                         }
 
                         var vAction = ApplyMarkingTextCell(variantRow, "Marking", vMarking, readOnlyMode);
@@ -475,6 +499,21 @@ public sealed partial class UnimesApp
                 else if (SaveItemInfo(mainWindow))
                 {
                     await DelayAsync(300);
+
+                    // 저장 후 정상 플로우엔 팝업이 없다. 떴다면 검증 거부 등 비정상 → 내용 로그 + 전체 중단.
+                    var popupMessage = await DetectUnexpectedDialogAsync();
+                    if (popupMessage is not null)
+                    {
+                        _screenshots.CaptureElement(mainWindow, $"item_info_save_popup_{request.PartNo}");
+                        result.Status = "ERROR";
+                        result.Saved = "NO";
+                        result.Message = $"저장 검증 팝업 감지 → 중단: {popupMessage}";
+                        _logger.Error($"품목정보관리 저장 후 예상치 못한 팝업 감지 → 중단. part='{request.PartNo}', message='{popupMessage}'");
+                        _abortReason = $"품목정보관리 저장 팝업(part='{request.PartNo}'): {popupMessage}";
+                        results.Add(result);
+                        break;
+                    }
+
                     _screenshots.CaptureElement(mainWindow, $"item_info_after_save_{request.PartNo}");
                     result.Status = "OK";
                     result.Saved = "YES";
@@ -505,6 +544,10 @@ public sealed partial class UnimesApp
                     {
                         PartNo = v.RowId,
                         Classification = classification.ToString(),
+                        // MFGID 변형 행은 BIN관리/TurnKey/조립입고를 N으로 채워 저장하므로 결과에도 반영.
+                        BinManage = "N",
+                        TurnKey = "N",
+                        AssemblyIn = "N",
                         Marking = v.Marking,
                         Saved = vSaved,
                         Status = result.Status,
