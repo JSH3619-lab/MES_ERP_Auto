@@ -52,6 +52,13 @@ public static class PartClassifier
         return PartClass.Unknown;
     }
 
+    // 더미 Part: PID(2번째 '-' 전) 리터럴 끝 2글자가 "00".
+    // 끝쪽 append가 가변이라 위치가 아닌 리터럴 끝으로 판정한다.
+    public static bool IsDummy(string partNo)
+    {
+        return ExtractPid((partNo ?? "").Trim()).EndsWith("00", StringComparison.Ordinal);
+    }
+
     public static string ExtractPid(string partNo)
     {
         var value = (partNo ?? "").Trim();

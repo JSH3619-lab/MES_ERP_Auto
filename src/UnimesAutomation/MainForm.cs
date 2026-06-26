@@ -13,8 +13,16 @@ public sealed class MainForm : Form
     [DllImport("user32.dll")]
     private static extern int SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 
+    // 관리자 권한 실행 시 UIPI가 일반 권한 탐색기→관리자 앱 파일 드롭을 막는 것을 푼다.
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
+
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
+    private const uint MsgfltAllow = 1;
+    private const uint WmDropFiles = 0x0233;
+    private const uint WmCopyData = 0x004A;
+    private const uint WmCopyGlobalData = 0x0049;
 
     private readonly RootConfig _config;
     private readonly RuntimePaths _paths;
@@ -169,7 +177,7 @@ public sealed class MainForm : Form
         body.RowStyles.Add(new RowStyle(SizeType.Absolute, 56)); // banner
         body.RowStyles.Add(new RowStyle(SizeType.Absolute, 64)); // buttons
 
-        body.Controls.Add(Dim("PART NO  ·  한 줄에 하나씩 / 쉼표·공백 구분"), 0, 0);
+        body.Controls.Add(Dim("PART NO  ·  한 줄에 하나씩 / 쉼표·공백 구분  ·  엑셀(.xlsx) 드래그앤드랍"), 0, 0);
 
         _parts.Multiline = true;
         _parts.Dock = DockStyle.Fill;
@@ -179,6 +187,9 @@ public sealed class MainForm : Form
         _parts.BackColor = UiTheme.SurfaceDeep;
         _parts.ForeColor = UiTheme.Text;
         _parts.Font = UiTheme.Mono(12.5f);
+        _parts.AllowDrop = true;
+        _parts.DragEnter += OnPartsDragEnter;
+        _parts.DragDrop += OnPartsDragDrop;
         var partsHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Navy, Padding = new Padding(3, 0, 0, 0) };
         partsHost.Controls.Add(_parts);
         body.Controls.Add(partsHost, 0, 1);
@@ -395,6 +406,78 @@ public sealed class MainForm : Form
         _config.Options = src.Options;
         _config.Categories = src.Categories;
         _config.Global = src.Global;
+    }
+
+    // ── 엑셀 드래그앤드랍 import (타이핑 입력은 그대로, 추출 PID를 텍스트박스에 채움) ──
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        // 관리자 권한으로 떠도 일반 권한 탐색기에서 드롭이 가능하도록 드롭 메시지를 허용한다.
+        AllowDropMessages(Handle);
+        AllowDropMessages(_parts.Handle);
+    }
+
+    private static void AllowDropMessages(IntPtr hWnd)
+    {
+        ChangeWindowMessageFilterEx(hWnd, WmDropFiles, MsgfltAllow, IntPtr.Zero);
+        ChangeWindowMessageFilterEx(hWnd, WmCopyData, MsgfltAllow, IntPtr.Zero);
+        ChangeWindowMessageFilterEx(hWnd, WmCopyGlobalData, MsgfltAllow, IntPtr.Zero);
+    }
+
+    private static bool IsExcelFile(string path)
+        => path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
+
+    private void OnPartsDragEnter(object? sender, DragEventArgs e)
+    {
+        if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true
+            && ((string[])e.Data.GetData(DataFormats.FileDrop)!).Any(IsExcelFile))
+        {
+            e.Effect = DragDropEffects.Copy;
+        }
+    }
+
+    private void OnPartsDragDrop(object? sender, DragEventArgs e)
+    {
+        if (e.Data?.GetDataPresent(DataFormats.FileDrop) != true)
+        {
+            return;
+        }
+
+        var files = ((string[])e.Data.GetData(DataFormats.FileDrop)!).Where(IsExcelFile).ToList();
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var codes = new List<string>();
+        foreach (var file in files)
+        {
+            try
+            {
+                codes.AddRange(ExcelPartReader.ReadCodes(file));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"엑셀 읽기 실패: {Path.GetFileName(file)}\n{ex.Message}",
+                    "엑셀 import", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        var parts = PartListParser.FromCodes(codes);
+        if (parts.Count == 0)
+        {
+            MessageBox.Show(this, "작업 대상 Part를 찾지 못했습니다. ('품목코드' 열을 확인하세요)",
+                "엑셀 import", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var pidText = string.Join(Environment.NewLine, parts.Select(p => p.PartNo));
+        _parts.Text = string.IsNullOrWhiteSpace(_parts.Text)
+            ? pidText
+            : _parts.Text.TrimEnd() + Environment.NewLine + pidText;
+
+        MessageBox.Show(this, $"{parts.Count}개 Part 추출 (더미·노이즈·중복 {codes.Count - parts.Count}건 제외).",
+            "엑셀 import", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     // ── 실행 (Approach 2: 백그라운드 스레드) ───────────────────────────────

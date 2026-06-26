@@ -92,9 +92,43 @@ public class BinIdResolverTests
     }
 
     [Theory]
-    [InlineData("DABHGD8J5F-HRRXZ21X0")]
-    [InlineData("DAXXGD8J5F-HRRXZ21B0")]
+    [InlineData("DABHGD8J5F-HRRXZ21Q0")] // Special Code1 'Q' 미지원
+    [InlineData("DAXXGD8J5F-HRRXZ21B0")] // 용량코드 'XG' 미지원
     public void Ssd_unresolvable_returns_null(string part)
+    {
+        Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
+    }
+
+    // Special Code1(대시 제외 18번째 글자)이 비-Repair(0/B/Z/X)면 2행.
+    [Theory]
+    [InlineData("DABHGD8J5F-ARRXZ31Z0")]  // Z = Tech-L BGA(VINA)
+    [InlineData("DABHGD8J5F-ARRSZ31Z0Y")] // Z, 끝쪽 append(Y) 가변 — 위치는 고정
+    [InlineData("DABHGD8J5F-HRRXZ21X0")]  // X = RAmos BGA
+    public void Ssd_non_repair_special_code1_resolves_two_rows(string part)
+    {
+        var target = BinIdResolver.Resolve(part, RootConfig.CreateDefault());
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Ssd, target!.Class);
+        Assert.Equal(2, target.Rows.Count);
+    }
+
+    // Special Code1이 Repair(R/Y/W)면 3행.
+    [Theory]
+    [InlineData("DABHGD8J5F-ARRXZ31Y0")] // Y = Repair Tech-L BGA(VINA)
+    [InlineData("DABHGD8J5F-HRRXZ21W0")] // W = Repair RAmos BGA
+    public void Ssd_repair_special_code1_resolves_three_rows(string part)
+    {
+        var target = BinIdResolver.Resolve(part, RootConfig.CreateDefault());
+        Assert.NotNull(target);
+        Assert.Equal(3, target!.Rows.Count);
+    }
+
+    // PID 리터럴 끝 2글자가 "00"이면 Special Code1과 무관하게 더미 → null.
+    [Theory]
+    [InlineData("DABHGD8J5F-ARRXZ3100")]   // R0의 더미
+    [InlineData("DABHGD8J5F-ARRXZ31Z00")]  // Special Code1=Z여도 끝 00이면 더미
+    [InlineData("DABHGD8J5F-ARRXZ31Y000")] // 끝 00 더미
+    public void Ssd_dummy_ending_00_returns_null(string part)
     {
         Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
     }

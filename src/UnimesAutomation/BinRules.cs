@@ -58,9 +58,15 @@ public static class SsdBinRules
         ["MG"] = "2TB"
     };
 
+    // Special Code1(BGA 종류, 대시 제외 18번째 글자) → 행 수.
+    // Repair 계열(R/Y/W)=3행, 그 외(0 Normal/B/Z/X)=2행.
+    private static readonly HashSet<char> RepairSpecialCode1 = ['R', 'Y', 'W'];
+    private static readonly HashSet<char> NormalSpecialCode1 = ['0', 'B', 'Z', 'X'];
+
     public static BinInfoTarget? Resolve(string partNo, SsdCategoryConfig config)
     {
-        var code = (partNo ?? "").Trim();
+        // 변형(2번째 '-' 이후 MFGID)이 들어와도 PID 기준으로 판정.
+        var code = PartClassifier.ExtractPid((partNo ?? "").Trim());
         if (PartClassifier.Classify(code) != PartClass.Ssd)
         {
             return null;
@@ -71,16 +77,31 @@ public static class SsdBinRules
             return null;
         }
 
-        if (code.EndsWith("B0", StringComparison.OrdinalIgnoreCase))
+        // 더미 Part(PID 끝 00)는 작업 대상 아님.
+        if (PartClassifier.IsDummy(code))
         {
-            var binIds = new[] { $"SSD_RDT_{capacity}", $"SSD_RDT_{capacity}" };
-            return BuildTarget(config.B0BinInfo, SsdCategoryConfig.Default().B0BinInfo, binIds);
+            return null;
         }
 
-        if (code.EndsWith("R0", StringComparison.OrdinalIgnoreCase))
+        // Special Code1 위치는 고정(대시 제외 18번째). 끝쪽만 가변이라 위치 읽기는 안전.
+        var nodash = code.Replace("-", "");
+        if (nodash.Length < 18)
+        {
+            return null;
+        }
+
+        var specialCode1 = char.ToUpperInvariant(nodash[17]);
+
+        if (RepairSpecialCode1.Contains(specialCode1))
         {
             var binIds = new[] { $"SSD_RDT_{capacity}", $"SSD_RDT_{capacity}_R", ValueTrimBinId };
             return BuildTarget(config.R0BinInfo, SsdCategoryConfig.Default().R0BinInfo, binIds);
+        }
+
+        if (NormalSpecialCode1.Contains(specialCode1))
+        {
+            var binIds = new[] { $"SSD_RDT_{capacity}", $"SSD_RDT_{capacity}" };
+            return BuildTarget(config.B0BinInfo, SsdCategoryConfig.Default().B0BinInfo, binIds);
         }
 
         return null;
