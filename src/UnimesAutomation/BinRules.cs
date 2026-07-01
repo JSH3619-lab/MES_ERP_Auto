@@ -23,7 +23,7 @@ public static class BinIdResolver
                 code,
                 config.Categories.DramModule.BinInfo,
                 config.Categories.DramComp.BinInfo),
-            PartClass.CompMdl => DramBinRules.ResolveCompMdl(code, config.Categories.DramComp.BinInfo),
+            PartClass.CompMdl => DramBinRules.ResolveCompMdl(code, config.Categories.DramModule.BinInfo),
             PartClass.Sip => SipBinRules.Resolve(code, config.Categories.Sip),
             _ => null
         };
@@ -183,7 +183,8 @@ public static class DramBinRules
 
     // Module 모양 Comp 파트(Comp_MDL): [소싱2][RC|4C][용량2] -> 용량 위치는 Module과 동일한 index 4..5.
     // RC=DDR5, 4C=DDR4. DDR5는 용량 무관 고정 BIN ID, DDR4는 1G/2G만 정의된다.
-    public static BinInfoTarget? ResolveCompMdl(string partNo, BinInfoValues compBinInfo)
+    // 공정명은 DRAM Module 설정(기본 M050)을 쓴다.
+    public static BinInfoTarget? ResolveCompMdl(string partNo, BinInfoValues moduleBinInfo)
     {
         var code = (partNo ?? "").Trim();
         if (PartClassifier.Classify(code) != PartClass.CompMdl || code.Length < 6)
@@ -207,8 +208,8 @@ public static class DramBinRules
             return null;
         }
 
-        var row = FirstRowOrDefault(compBinInfo, compBinInfo.ProcessSearchKey);
-        var processKey = ProcessKey(row, compBinInfo.ProcessSearchKey);
+        var row = FirstRowOrDefault(moduleBinInfo, moduleBinInfo.ProcessSearchKey);
+        var processKey = ProcessKey(row, moduleBinInfo.ProcessSearchKey);
         return new BinInfoTarget(PartClass.CompMdl, [new BinInfoRowTarget(processKey, name, row)]);
     }
 

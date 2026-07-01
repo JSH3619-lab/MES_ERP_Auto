@@ -69,7 +69,7 @@ SIP는 BIN/TurnKey/조립입고/불량창고(=DRAM Module과 동일)에 더해 `
 
 `BinIdResolver`가 Part No에서 분류, 공정 키, BIN ID 이름, 필요한 BIN 행 목록을 계산한다. DRAM(`DramBinRules`)·SSD(`SsdBinRules`)·SIP(`SipBinRules`) 규칙은 `BinRules.cs` 한 파일에 클래스로 함께 둔다.
 
-Comp_MDL(`DramBinRules.ResolveCompMdl`)은 용량 위치가 Module과 동일(index 4-5)하고, 접두 뒤 2글자(index 2-3)로 DDR 세대를 가른다: `RC`=DDR5(용량 무관 고정 BIN ID `DRAM_Comp_D5_XMP_Test`), `4C`=DDR4(`1G`→`DRAM_Comp_D4_Test2`, `2G`→`DRAM_Comp_D4_Test`, 그 외 용량은 미지원·SKIPPED). 공정 키는 DRAM Comp 설정(`categories.dramComp.binInfo`, 기본 `C010`)을 그대로 쓴다.
+Comp_MDL(`DramBinRules.ResolveCompMdl`)은 용량 위치가 Module과 동일(index 4-5)하고, 접두 뒤 2글자(index 2-3)로 DDR 세대를 가른다: `RC`=DDR5(용량 무관 고정 BIN ID `DRAM_Comp_D5_XMP_Test`), `4C`=DDR4(`1G`→`DRAM_Comp_D4_Test2`, `2G`→`DRAM_Comp_D4_Test`, 그 외 용량은 미지원·SKIPPED). 공정 키는 DRAM Module 설정(`categories.dramModule.binInfo`, 기본 `M050`)을 쓴다.
 
 - BIN-only 실행은 `품목 코드` 팝업으로 대상 품목을 먼저 선택한다.
 - 기존 BIN 행이 목표 행 수 이상이면 신규 행추가 없이 변경 없음으로 처리한다.

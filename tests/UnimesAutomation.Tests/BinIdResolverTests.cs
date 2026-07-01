@@ -58,7 +58,7 @@ public class BinIdResolverTests
 
         Assert.NotNull(target);
         Assert.Equal(PartClass.CompMdl, target!.Class);
-        Assert.Equal("C010", target.ProcessSearchKey);
+        Assert.Equal("M050", target.ProcessSearchKey);
         Assert.Equal(expected, target.BinIdName);
     }
 
