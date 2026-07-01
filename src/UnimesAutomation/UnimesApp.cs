@@ -2013,6 +2013,10 @@ public sealed partial class UnimesApp
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
+            // 로그인 버튼 대기 중에도 '서버가 응답하지 않습니다' Try again 배너가 뜰 수 있다.
+            // 최초 진입 시 1회만 검사하면 이 창을 놓치므로 매 폴링마다 재확인한다.
+            await RestoreLoginTryAgainStateAsync(loginWindow);
+
             var button = FindButtonByAnyName(loginWindow, ["확인", "?뺤씤", "Login", "OK"]);
             if (button is not null && SafeRead(() => button.Current.IsEnabled))
             {
