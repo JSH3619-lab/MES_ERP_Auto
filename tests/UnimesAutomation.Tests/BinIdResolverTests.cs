@@ -43,6 +43,33 @@ public class BinIdResolverTests
         Assert.Null(BinIdResolver.Resolve(part, "M050", "C010"));
     }
 
+    // Comp_MDL: MDL 접두(RM/TM/BM/CM/ZM) 뒤 2글자가 RC/4C면 Module 모양의 Comp 파트.
+    // 용량 위치는 Module과 동일(index 4-5). RC=DDR5(용량 무관 고정), 4C=DDR4(1G/2G만 정의).
+    [Theory]
+    [InlineData("RMRCAG58A1P-GPWRRWM7", "DRAM_Comp_D5_XMP_Test")]  // RC=DDR5, 용량 무관
+    [InlineData("RMRC1G58A1P-GPWRRWM7", "DRAM_Comp_D5_XMP_Test")]  // RC=DDR5, 1G여도 동일
+    [InlineData("ZMRC2G58A1P-GPWRRWM7", "DRAM_Comp_D5_XMP_Test")]  // ZM=Module 접두, 규칙 동일
+    [InlineData("RM4C1G58A1P-GPWRRWM7", "DRAM_Comp_D4_Test2")]     // 4C=DDR4, 1G
+    [InlineData("RM4C2G58A1P-GPWRRWM7", "DRAM_Comp_D4_Test")]      // 4C=DDR4, 2G
+    public void CompMdl_resolves_by_infix_and_capacity(string part, string expected)
+    {
+        var cfg = RootConfig.CreateDefault();
+        var target = BinIdResolver.Resolve(part, cfg);
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.CompMdl, target!.Class);
+        Assert.Equal("C010", target.ProcessSearchKey);
+        Assert.Equal(expected, target.BinIdName);
+    }
+
+    [Theory]
+    [InlineData("RM4C4G58A1P-GPWRRWM7")] // 4C인데 1G/2G 외 용량 -> 미지원
+    [InlineData("RM4C")]                  // 길이 부족
+    public void CompMdl_unresolvable_returns_null(string part)
+    {
+        Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
+    }
+
     [Fact]
     public void Ssd_b0_resolves_two_rows()
     {

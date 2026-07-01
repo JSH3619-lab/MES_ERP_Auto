@@ -35,7 +35,7 @@ public sealed class RootConfig
     public ItemInfoValues? ResolveItemInfo(PartClass cls) => cls switch
     {
         PartClass.Module => Categories.DramModule.ItemInfo,
-        PartClass.Comp => Categories.DramComp.ItemInfo,
+        PartClass.Comp or PartClass.CompMdl => Categories.DramComp.ItemInfo,
         PartClass.Ssd => Categories.Ssd.ItemInfo,
         PartClass.Sip => Categories.Sip.ItemInfo,
         _ => null

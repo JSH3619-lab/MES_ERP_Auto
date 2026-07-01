@@ -4,6 +4,7 @@ public enum PartClass
 {
     Module,
     Comp,
+    CompMdl,
     Ssd,
     Sip,
     Unknown
@@ -19,6 +20,9 @@ public static class PartClassifier
     private static readonly string[] CompPrefixes = ["RC", "TC", "BC", "CC", "ZC"];
     private static readonly string[] SsdPrefixes = ["DA", "DE"];
     private static readonly string[] SipPrefixes = ["SN"];
+
+    // MDL 접두(ModulePrefixes) 뒤 2글자가 RC/4C면 Module 모양의 Comp 파트(Comp_MDL)다.
+    private static readonly string[] CompMdlInfixes = ["RC", "4C"];
 
     public static PartClass Classify(string partNo)
     {
@@ -36,6 +40,11 @@ public static class PartClassifier
 
         if (ModulePrefixes.Contains(prefix))
         {
+            if (normalized.Length >= 4 && CompMdlInfixes.Contains(normalized.Substring(2, 2)))
+            {
+                return PartClass.CompMdl;
+            }
+
             return PartClass.Module;
         }
 
