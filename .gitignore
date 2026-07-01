@@ -3,7 +3,7 @@ obj/
 logs/
 screenshots/
 output/
-dist/
+publish/
 .vs/
 .idea/
 .vscode/

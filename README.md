@@ -39,13 +39,13 @@ dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj -c Rele
 ## 단일 exe 생성
 
 ```powershell
-dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\dist
+dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
 ```
 
 생성 파일:
 
 ```text
-dist/UnimesAutomation.exe
+publish/UnimesAutomation.exe
 ```
 
 ## 실행

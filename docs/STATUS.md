@@ -6,7 +6,7 @@
 
 - 브랜치: `feature/mes-gui`
 - GUI 기준 실행이 현재 기본 흐름이다.
-- `dist/UnimesAutomation.exe`는 단일 실행 파일로 publish해서 실기 테스트한다.
+- `publish/UnimesAutomation.exe`는 단일 실행 파일로 publish해서 실기 테스트한다.
 - `app.manifest`가 DPI awareness를 `unaware`로 고정한다.
   - 목적: 실행 중 GUI 창 축소와 좌표 클릭 어긋남 방지.
   - 금지: `Application.SetHighDpiMode(HighDpiMode.PerMonitorV2)` 런타임 호출 재시도 금지.

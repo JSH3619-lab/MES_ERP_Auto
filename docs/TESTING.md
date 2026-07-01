@@ -9,10 +9,10 @@ dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj -c Rele
 
 ## 단일 exe publish
 
-`dist/`는 git ignore 대상이다. 배포/실기 테스트용 단일 exe가 필요하면 로컬에서 다시 만든다.
+`publish/`는 git ignore 대상이다. 배포/실기 테스트용 단일 exe가 필요하면 로컬에서 다시 만든다.
 
 ```powershell
-dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\dist
+dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
 ```
 
 ## 실행 모드
