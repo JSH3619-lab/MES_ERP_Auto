@@ -365,6 +365,19 @@ public sealed partial class UnimesApp
 
     private AutomationElement? FindMenuSearchInput(AutomationElement mainWindow, AutomationElement? menuSearchButton)
     {
+        // 메뉴찾기 팝업('frmGosearch')의 입력칸('txt')을 automationId로 직접 찾는다.
+        // 좌표로만 고르면 열려있는 다른 화면(예: 품목정보관리)의 우상단 Edit이 몇 px 차이로
+        // 선택되어 메뉴 이동이 실패한다. 해상도/DPI에 따라 결과가 달라지므로 직접 탐색을 우선한다.
+        var gosearch = FindByAutomationId(mainWindow, "frmGosearch");
+        if (gosearch is not null)
+        {
+            var txt = FindByAutomationId(gosearch, "txt");
+            if (txt is not null && IsWritableEdit(txt))
+            {
+                return txt;
+            }
+        }
+
         var mainRect = SafeReadRect(() => mainWindow.Current.BoundingRectangle);
         var buttonRect = menuSearchButton is null ? null : SafeReadRect(() => menuSearchButton.Current.BoundingRectangle);
         if (mainRect is null || mainRect.Value.IsEmpty)
