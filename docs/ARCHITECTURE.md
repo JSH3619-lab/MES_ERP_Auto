@@ -59,11 +59,16 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 파트별로 `품목명` 입력 후 조회하고, `PartClassifier` 결과에 따라 BIN 관리/TurnKey/AssemblyIn/불량창고 셀을 비교한다. 미존재 Part는 `[971001]품목 코드 이(가) 존재하지 않습니다.` 경고와 `고객사PartID PopUp`을 닫고 SKIPPED 처리한다.
 
-분류 prefix는 DRAM Module=`RM/TM/BM/CM/ZM`, DRAM Comp=`RC/TC/BC/CC/ZC`, SSD=`DA/DE`, SIP=`SN`이다. SSD 품목정보는 BIN 관리/Turn Key/불량창고만 처리하고 조립입고 공정이동여부는 건드리지 않는다.
+분류 prefix는 DRAM Module=`RM/TM/BM/CM/ZM`, DRAM Comp=`RC/TC/BC/CC/ZC`, SSD=`DA/DE`, SIP=`SN`, UDP2.0/uUDP2.0=`UL/US`(`PartClass.Udp2`), UDP3.0=`NL`(`PartClass.Udp3`)이다. SSD 품목정보는 BIN 관리/Turn Key/불량창고만 처리하고 조립입고 공정이동여부는 건드리지 않는다.
 
 Module 접두(`RM/TM/BM/CM/ZM`) 뒤 2글자가 `RC` 또는 `4C`면 Module 모양의 Comp 파트(`PartClass.CompMdl`, 이하 Comp_MDL)로 분류한다. 품목정보관리는 DRAM Comp와 동일 카테고리(TurnKey/조립입고/불량창고)를 쓴다.
 
 SIP는 BIN/TurnKey/조립입고/불량창고(=DRAM Module과 동일)에 더해 `Marking` 셀을 채운다. base 행은 PID 파생값(`SipMarking.Compute`), 조회 시 함께 뜨는 MFGID 변형 행(`품목ID`가 `PID + "-"`로 시작)은 `"{MFGID 용량} {base}"`로 **Marking만** 입력하고 다른 셀은 건드리지 않는다. `PID + "-"` 앵커로 `...0J/0S/00` 같은 다른 파트는 배제. PID 끝 2글자가 `0S/0G/0J/0K`면 Marking 생략.
+
+UDP(`UdpRules`)는 SIP와 같은 파트 체계·Marking 산출식을 쓰되 다음이 다르다.
+- Turn Key: 고정 N이 아니라 **대시 제외 12번째(조립 업체)·13번째(Test 업체) 글자가 같으면 Y** (`UdpRules.ComputeTurnKey`).
+- 품목특별속성: PID 끝 2글자 → 선택값 매핑(`global.udpSpecialAttributes`, 기본 `0M`→`RMA(자산)`/`0R`→`RMA(비자산)`/`0Y`→`재고 RETEST`), 매핑에 없으면 미선택 (`UdpRules.SpecialAttribute`). 설정 GUI `고급`에서 편집.
+- MFGID 변형 행: BIN관리/TurnKey만 N으로 채우고 **조립입고는 미선택**(SIP는 N). 변형 Marking은 UDP2.0(`UL`)=`"{용량} {base}"`(SIP 동일), uUDP2.0(`US`)=`"{용량}{base}"`(공백 없음), UDP3.0(`NL`)=`"{용량}{속도 P/N} {base}"`(MFGID 2번째 글자). 버전 판정은 `SipMarking.RowMarking`이 PID 접두로 한다.
 
 ## 품목별 BIN 정보 관리
 
@@ -74,6 +79,7 @@ Comp_MDL(`DramBinRules.ResolveCompMdl`)은 용량 위치가 Module과 동일(ind
 - BIN-only 실행은 `품목 코드` 팝업으로 대상 품목을 먼저 선택한다.
 - 기존 BIN 행이 목표 행 수 이상이면 신규 행추가 없이 변경 없음으로 처리한다.
 - 신규 행이 필요하면 행 추가 후 실제 `BIN 정보 선택` 행이 생겼는지 확인하고 셀을 채운다. SSD B0는 2행, SSD R0는 3행, SIP는 공정 M030 2행(BIN ID=`SIP_Normal_{용량}_AIO`, 1행 Bin완료여부는 미설정)을 순서대로 처리한다.
+- UDP(`UdpBinRules`, 행 템플릿은 `categories.udp2/udp3` 설정·기본 공정 M030): UDP2.0/uUDP2.0은 Normal-1→Normal-2 2행(BIN ID 두 행 동일 `UDP_Normal_{용량}`, Retest TH Normal/Normal), UDP3.0은 Normal-1→Special-1 2행(행 BIN Type이 Special 계열이면 `UDP3.0_Special_{용량}`, 아니면 `UDP3.0_Normal_{용량}`, Retest TH H/Y). 공통: Retest No 0/1, Bin완료여부 미설정/Y, 더미(PID 끝 00)는 스킵.
 - GUI 실행은 실제 저장 모드로 고정되며 정상 저장은 `Ctrl+S`로 수행한다.
 
 ## 저장 안전장치

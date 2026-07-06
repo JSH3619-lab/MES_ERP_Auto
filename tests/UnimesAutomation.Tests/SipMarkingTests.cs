@@ -63,4 +63,35 @@ public class SipMarkingTests
     {
         Assert.Equal("", SipMarking.RowMarking("SNAKGD8J0B-HZRA0J", "SNAKGD8J0B-HZRA0J"));
     }
+
+    // UDP 등록 예시 이메일 기준. base Marking은 SIP과 같은 산출식.
+    [Theory]
+    [InlineData("ULAHGD8J0D-HBRAB2", "AHDHBABYWW")] // UDP2.0
+    [InlineData("USAHGD8J0D-HBRAB1", "AHDHBABYWW")] // uUDP2.0
+    [InlineData("NLAHGD8J0D-H6RF51", "AHDH6F5YWW")] // UDP3.0
+    public void Compute_matches_udp_examples(string pid, string expected)
+    {
+        Assert.Equal(expected, SipMarking.Compute(pid));
+    }
+
+    // UDP3.0(NL) 변형: 용량(3-4) 뒤에 속도 글자(MFGID 2번째, P/N)를 붙인다. 예시 그리드 전수 대조 규칙.
+    [Theory]
+    [InlineData("NLAHGD8J0D-H6RF51-TPCGA00", "CGP AHDH6F5YWW")]
+    [InlineData("NLAHGD8J0D-H6RF51-TNCGB00", "CGN AHDH6F5YWW")]
+    [InlineData("NLAHGD8J0D-H6RF51-HN8GD00", "8GN AHDH6F5YWW")]
+    [InlineData("NLAHGD8J0D-H6RF51-HPAGA00", "AGP AHDH6F5YWW")]
+    public void RowMarking_with_speed_char_for_udp3(string rowId, string expected)
+    {
+        Assert.Equal(expected, SipMarking.RowMarking("NLAHGD8J0D-H6RF51", rowId));
+    }
+
+    // UDP2.0(UL) 변형은 SIP과 동일한 2자 용량 + 공백. uUDP2.0(US)만 공백 없이 붙인다(작업자 확정).
+    [Theory]
+    [InlineData("ULAHGD8J0D-HBRAB2", "ULAHGD8J0D-HBRAB2-TNCGA00", "CG AHDHBABYWW")]
+    [InlineData("USAHGD8J0D-HBRAB1", "USAHGD8J0D-HBRAB1-TN8GD00", "8GAHDHBABYWW")]
+    [InlineData("USAHGD8J0D-HBRAB1", "USAHGD8J0D-HBRAB1-TNCGA00", "CGAHDHBABYWW")]
+    public void RowMarking_udp2_capacity_prefix(string pid, string rowId, string expected)
+    {
+        Assert.Equal(expected, SipMarking.RowMarking(pid, rowId));
+    }
 }

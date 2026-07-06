@@ -375,6 +375,15 @@ public sealed partial class UnimesApp
                 var readOnlyMode = _config.Safety.DryRun || !_config.Safety.SaveEnabled;
                 _logger.Info($"품목정보관리 셀 비교 시작. part='{request.PartNo}', readOnly={readOnlyMode}");
 
+                // UDP(UL/US/NL): Turn Key는 고정값이 아니라 대시 제외 12·13번째(조립/Test 업체) 동일 여부로 계산.
+                var isUdp = classification is PartClass.Udp2 or PartClass.Udp3;
+                var isSipFamily = classification == PartClass.Sip || isUdp;
+                if (isUdp)
+                {
+                    result.TurnKey = UdpRules.ComputeTurnKey(pid);
+                    _logger.Info($"품목정보관리 UDP Turn Key 계산. part='{request.PartNo}', turnKey={result.TurnKey}");
+                }
+
                 var detail = new List<string>();
                 var changeCount = 0;
                 var wouldCount = 0;
@@ -412,9 +421,29 @@ public sealed partial class UnimesApp
                     }
                 }
 
-                // SIP: PID 파생 Marking을 같은 행 텍스트 셀에 입력. 예외 접미(0S/0G/0J/0K)면 생략.
+                // UDP: 품목특별속성(global.udpSpecialAttributes: 기본 0M/0R/0Y)만 선택. 그 외는 미선택이라 건드리지 않는다.
+                if (isUdp)
+                {
+                    var attr = UdpRules.SpecialAttribute(pid, _config.Global.UdpSpecialAttributes);
+                    if (!string.IsNullOrEmpty(attr))
+                    {
+                        var attrAction = ApplyComboCell(row, "품목특별속성", attr, readOnlyMode);
+                        if (attrAction == CellAction.Changed)
+                        {
+                            changeCount++;
+                            detail.Add($"품목특별속성={attr}");
+                        }
+                        else if (attrAction == CellAction.WouldChange)
+                        {
+                            wouldCount++;
+                            detail.Add($"품목특별속성→{attr}");
+                        }
+                    }
+                }
+
+                // SIP/UDP: PID 파생 Marking을 같은 행 텍스트 셀에 입력. 예외 접미(0S/0G/0J/0K)면 생략.
                 // 저장은 아래 품목정보 Ctrl+S 1회에 함께 포함된다(별도 저장 없음).
-                if (classification == PartClass.Sip && SipMarking.ShouldMark(pid))
+                if (isSipFamily && SipMarking.ShouldMark(pid))
                 {
                     var marking = SipMarking.Compute(pid);
                     if (!string.IsNullOrWhiteSpace(marking))
@@ -433,27 +462,32 @@ public sealed partial class UnimesApp
                         }
                     }
                 }
-                else if (classification == PartClass.Sip)
+                else if (isSipFamily)
                 {
-                    _logger.Info($"품목정보관리 SIP Marking 생략(예외 접미). part='{request.PartNo}', pid='{pid}'");
+                    _logger.Info($"품목정보관리 Marking 생략(예외 접미). part='{request.PartNo}', pid='{pid}', class={classification}");
                 }
 
-                // SIP MFGID 변형 행: 품목ID가 'pid + "-"' 로 시작하는 모든 행을 처리.
+                // SIP/UDP MFGID 변형 행: 품목ID가 'pid + "-"' 로 시작하는 모든 행을 처리.
                 // 'pid + "-"' 앵커라 ...0J/0S/00 같은 다른 PID 행은 배제된다. 저장은 아래 Ctrl+S 1회에 함께 포함.
                 var sipVariants = new List<(string RowId, string Marking, CellAction Action)>();
-                if (classification == PartClass.Sip)
+                if (isSipFamily)
                 {
                     foreach (var (variantRow, rowId) in FindItemGridRowsStartingWith(itemInfoWindow, pid + "-"))
                     {
+                        // 버전별 변형 마킹 차이(UDP3.0 속도 글자, uUDP2.0 공백 없음)는 RowMarking이 PID 접두로 판정.
                         var vMarking = SipMarking.RowMarking(pid, rowId);
                         if (string.IsNullOrEmpty(vMarking))
                         {
                             continue;
                         }
 
-                        // MFGID 행은 BIN관리/TurnKey/조립입고를 N으로 채워야 한다. 블랭크로 두면 Marking 저장 시
+                        // SIP: MFGID 행은 BIN관리/TurnKey/조립입고를 N으로 채워야 한다. 블랭크로 두면 Marking 저장 시
                         // [970029] 같은 검증 경고가 떠서 저장이 거부된다.
-                        foreach (var nColumn in new[] { "BIN 관리", "Turn Key", "조립입고 공정이동여부" })
+                        // UDP: 조립입고는 미선택(빈칸)으로 둔다(등록 예시 그리드 근거).
+                        var nColumns = classification == PartClass.Sip
+                            ? new[] { "BIN 관리", "Turn Key", "조립입고 공정이동여부" }
+                            : new[] { "BIN 관리", "Turn Key" };
+                        foreach (var nColumn in nColumns)
                         {
                             var nAction = ApplyComboCell(variantRow, nColumn, "N", readOnlyMode);
                             if (nAction == CellAction.Changed)
@@ -544,10 +578,11 @@ public sealed partial class UnimesApp
                     {
                         PartNo = v.RowId,
                         Classification = classification.ToString(),
-                        // MFGID 변형 행은 BIN관리/TurnKey/조립입고를 N으로 채워 저장하므로 결과에도 반영.
+                        // MFGID 변형 행은 BIN관리/TurnKey를 N으로 채워 저장하므로 결과에도 반영.
+                        // 조립입고는 SIP만 N, UDP는 미선택(빈칸).
                         BinManage = "N",
                         TurnKey = "N",
-                        AssemblyIn = "N",
+                        AssemblyIn = classification == PartClass.Sip ? "N" : "",
                         Marking = v.Marking,
                         Saved = vSaved,
                         Status = result.Status,

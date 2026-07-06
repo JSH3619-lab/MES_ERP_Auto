@@ -17,10 +17,20 @@ public sealed class SettingsForm : Form
     private readonly TextBox _launchPath = new() { Width = 460 };
     private readonly TextBox _recoveryPart = new() { Width = 300 };
 
+    // UDP 품목특별속성 매핑(PID 끝 2글자 → 선택값) 편집 그리드.
+    private readonly DataGridView _udpAttr = new()
+    {
+        Width = 360,
+        Height = 140,
+        AllowUserToResizeRows = false
+    };
+
     private readonly CategorySettingsControl _modulePanel;
     private readonly CategorySettingsControl _compPanel;
     private readonly SsdSettingsControl _ssdPanel;
     private readonly CategorySettingsControl _sipPanel;
+    private readonly CategorySettingsControl _udp2Panel;
+    private readonly CategorySettingsControl _udp3Panel;
     private readonly Panel _host = new() { Dock = DockStyle.Fill };
     private bool _hasSavedPassword;
     private bool _passwordEdited;
@@ -34,6 +44,8 @@ public sealed class SettingsForm : Form
         _compPanel = new CategorySettingsControl(_config.Categories.DramComp, _config.Options) { Dock = DockStyle.Fill };
         _ssdPanel = new SsdSettingsControl(_config.Categories.Ssd, _config.Options) { Dock = DockStyle.Fill };
         _sipPanel = new CategorySettingsControl(_config.Categories.Sip, _config.Options) { Dock = DockStyle.Fill };
+        _udp2Panel = new CategorySettingsControl(_config.Categories.Udp2, _config.Options) { Dock = DockStyle.Fill };
+        _udp3Panel = new CategorySettingsControl(_config.Categories.Udp3, _config.Options) { Dock = DockStyle.Fill };
 
         Text = "설정";
         Width = 760;
@@ -49,6 +61,8 @@ public sealed class SettingsForm : Form
         nav.Controls.Add(NavButton("DRAM Comp", () => _compPanel));
         nav.Controls.Add(NavButton("SSD", () => _ssdPanel));
         nav.Controls.Add(NavButton("SIP", () => _sipPanel));
+        nav.Controls.Add(NavButton("UDP2.0", () => _udp2Panel));
+        nav.Controls.Add(NavButton("UDP3.0", () => _udp3Panel));
         nav.Controls.Add(NavButton("고급", BuildAdvancedPanel));
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
@@ -135,6 +149,8 @@ public sealed class SettingsForm : Form
         p.Controls.Add(_launchPath);
         p.Controls.Add(new Label { Text = "복구용 기파트", AutoSize = true });
         p.Controls.Add(_recoveryPart);
+        p.Controls.Add(new Label { Text = "UDP 품목특별속성\n(PID 끝 2글자 → 선택값)", AutoSize = true });
+        p.Controls.Add(_udpAttr);
         return p;
     }
 
@@ -170,6 +186,13 @@ public sealed class SettingsForm : Form
     {
         _launchPath.Text = _config.App.LaunchPath;
         _recoveryPart.Text = _config.Global.RecoveryPart;
+
+        _udpAttr.Columns.Add(new DataGridViewTextBoxColumn { Name = "suffix", HeaderText = "끝 2글자", Width = 80 });
+        _udpAttr.Columns.Add(new DataGridViewTextBoxColumn { Name = "value", HeaderText = "품목특별속성 값", Width = 200 });
+        foreach (var (suffix, value) in _config.Global.UdpSpecialAttributes)
+        {
+            _udpAttr.Rows.Add(suffix, value);
+        }
     }
 
     private void Save()
@@ -190,6 +213,26 @@ public sealed class SettingsForm : Form
         _compPanel.ApplyTo(_config.Categories.DramComp);
         _ssdPanel.ApplyTo(_config.Categories.Ssd);
         _sipPanel.ApplyTo(_config.Categories.Sip);
+        _udp2Panel.ApplyTo(_config.Categories.Udp2);
+        _udp3Panel.ApplyTo(_config.Categories.Udp3);
+
+        var udpAttrs = new Dictionary<string, string>();
+        foreach (DataGridViewRow r in _udpAttr.Rows)
+        {
+            if (r.IsNewRow)
+            {
+                continue;
+            }
+
+            var suffix = (r.Cells["suffix"].Value?.ToString() ?? "").Trim();
+            var value = (r.Cells["value"].Value?.ToString() ?? "").Trim();
+            if (suffix.Length > 0 && value.Length > 0)
+            {
+                udpAttrs[suffix] = value;
+            }
+        }
+
+        _config.Global.UdpSpecialAttributes = udpAttrs;
 
         ConfigStore.Save(_path, _config);
         DialogResult = DialogResult.OK;

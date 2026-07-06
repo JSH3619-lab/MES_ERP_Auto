@@ -25,6 +25,7 @@ public static class BinIdResolver
                 config.Categories.DramComp.BinInfo),
             PartClass.CompMdl => DramBinRules.ResolveCompMdl(code, config.Categories.DramModule.BinInfo),
             PartClass.Sip => SipBinRules.Resolve(code, config.Categories.Sip),
+            PartClass.Udp2 or PartClass.Udp3 => UdpBinRules.Resolve(code, config.Categories.Udp2, config.Categories.Udp3),
             _ => null
         };
     }
@@ -225,8 +226,8 @@ public static class DramBinRules
 
 public static class SipBinRules
 {
-    // 용량코드(파트 4-5번째) -> 용량. SSD와 위치는 같고 표만 SIP용.
-    private static readonly Dictionary<string, string> Density = new(StringComparer.OrdinalIgnoreCase)
+    // 용량코드(파트 4-5번째) -> 용량. SSD와 위치는 같고 표는 SIP/UDP 공용(파트 체계 동일).
+    internal static readonly Dictionary<string, string> Density = new(StringComparer.OrdinalIgnoreCase)
     {
         ["8G"] = "8Gb",
         ["AG"] = "16Gb",
@@ -276,5 +277,60 @@ public static class SipBinRules
         }
 
         return new BinInfoTarget(PartClass.Sip, rows);
+    }
+}
+
+public static class UdpBinRules
+{
+    // 행 템플릿(공정/타입/완료여부/TH)은 config(categories.udp2/udp3, 없으면 기본)에서 가져온다.
+    // BIN ID는 파트 용량으로 산출: UDP2.0/uUDP2.0=UDP_Normal_{용량}(전 행 동일),
+    // UDP3.0=행 BIN Type이 Special 계열이면 UDP3.0_Special_{용량}, 아니면 UDP3.0_Normal_{용량}.
+    public static BinInfoTarget? Resolve(string partNo, CategoryConfig udp2Config, CategoryConfig udp3Config)
+    {
+        // 변형(MFGID)이 들어와도 PID 기준으로 판정.
+        var code = PartClassifier.ExtractPid((partNo ?? "").Trim());
+        var cls = PartClassifier.Classify(code);
+        if (cls is not (PartClass.Udp2 or PartClass.Udp3))
+        {
+            return null;
+        }
+
+        // 더미 Part(PID 끝 00)는 작업 대상 아님.
+        if (PartClassifier.IsDummy(code))
+        {
+            return null;
+        }
+
+        // 용량 위치·표는 SIP와 공용(4-5번째).
+        if (code.Length < 5 || !SipBinRules.Density.TryGetValue(code.Substring(3, 2), out var capacity))
+        {
+            return null;
+        }
+
+        var (configured, defaults) = cls == PartClass.Udp2
+            ? (udp2Config.BinInfo, CategoryConfig.DefaultUdp2().BinInfo)
+            : (udp3Config.BinInfo, CategoryConfig.DefaultUdp3().BinInfo);
+
+        var sourceRows = configured.Rows.Count > 0 ? configured.Rows : defaults.Rows;
+        var rows = new List<BinInfoRowTarget>();
+        foreach (var src in sourceRows)
+        {
+            var row = src.Clone();
+            var processKey = string.IsNullOrWhiteSpace(row.ProcessName) ? configured.ProcessSearchKey : row.ProcessName;
+            if (string.IsNullOrWhiteSpace(processKey))
+            {
+                processKey = defaults.ProcessSearchKey;
+            }
+
+            var binId = cls == PartClass.Udp2
+                ? $"UDP_Normal_{capacity}"
+                : row.BinType.StartsWith("Special", StringComparison.OrdinalIgnoreCase)
+                    ? $"UDP3.0_Special_{capacity}"
+                    : $"UDP3.0_Normal_{capacity}";
+
+            rows.Add(new BinInfoRowTarget(processKey, binId, row));
+        }
+
+        return new BinInfoTarget(cls, rows);
     }
 }

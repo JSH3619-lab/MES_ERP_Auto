@@ -160,6 +160,51 @@ public class BinIdResolverTests
         Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
     }
 
+    // UDP2.0(UL)/uUDP2.0(US): Normal-1 → Normal-2, BIN ID 두 행 동일, Retest TH Normal/Normal.
+    [Theory]
+    [InlineData("ULAHGD8J0D-HBRAB1")]
+    [InlineData("USAHGD8J0D-HBRAB1")]
+    [InlineData("ULAHGD8J0D-HBRAB1-TNCGA00")] // 변형이 들어와도 PID 기준
+    public void Udp2_resolves_normal1_normal2(string part)
+    {
+        var target = BinIdResolver.Resolve(part, RootConfig.CreateDefault());
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Udp2, target!.Class);
+        Assert.Equal(2, target.Rows.Count);
+        Assert.All(target.Rows, r => Assert.Equal("M030", r.ProcessSearchKey));
+        Assert.Equal(["UDP_Normal_512Gb", "UDP_Normal_512Gb"], target.Rows.Select(r => r.BinIdName).ToArray());
+        Assert.Equal(["Normal-1", "Normal-2"], target.Rows.Select(r => r.Row.BinType).ToArray());
+        Assert.Equal(["0", "1"], target.Rows.Select(r => r.Row.RetestNo).ToArray());
+        Assert.Equal(["", "Y"], target.Rows.Select(r => r.Row.BinComplete).ToArray());
+        Assert.Equal(["Normal", "Normal"], target.Rows.Select(r => r.Row.RetestTh).ToArray());
+    }
+
+    // UDP3.0(NL): Normal-1 → Special-1, BIN ID Normal/Special 분리, Retest TH H/Y.
+    [Fact]
+    public void Udp3_resolves_normal1_special1()
+    {
+        var target = BinIdResolver.Resolve("NLAHGD8J0D-H6RF51", RootConfig.CreateDefault());
+
+        Assert.NotNull(target);
+        Assert.Equal(PartClass.Udp3, target!.Class);
+        Assert.Equal(2, target.Rows.Count);
+        Assert.All(target.Rows, r => Assert.Equal("M030", r.ProcessSearchKey));
+        Assert.Equal(["UDP3.0_Normal_512Gb", "UDP3.0_Special_512Gb"], target.Rows.Select(r => r.BinIdName).ToArray());
+        Assert.Equal(["Normal-1", "Special-1"], target.Rows.Select(r => r.Row.BinType).ToArray());
+        Assert.Equal(["0", "1"], target.Rows.Select(r => r.Row.RetestNo).ToArray());
+        Assert.Equal(["", "Y"], target.Rows.Select(r => r.Row.BinComplete).ToArray());
+        Assert.Equal(["H", "Y"], target.Rows.Select(r => r.Row.RetestTh).ToArray());
+    }
+
+    [Theory]
+    [InlineData("ULAHGD8J0D-HBRAB200")] // 더미(끝 00)
+    [InlineData("ULAZZD8J0D-HBRAB1")]   // 미지원 용량코드 ZZ
+    public void Udp_unresolvable_returns_null(string part)
+    {
+        Assert.Null(BinIdResolver.Resolve(part, RootConfig.CreateDefault()));
+    }
+
     [Fact]
     public void Sip_resolves_two_rows_with_same_binid()
     {

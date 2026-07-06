@@ -7,6 +7,8 @@ public enum PartClass
     CompMdl,
     Ssd,
     Sip,
+    Udp2,
+    Udp3,
     Unknown
 }
 
@@ -20,6 +22,10 @@ public static class PartClassifier
     private static readonly string[] CompPrefixes = ["RC", "TC", "BC", "CC", "ZC"];
     private static readonly string[] SsdPrefixes = ["DA", "DE"];
     private static readonly string[] SipPrefixes = ["SN"];
+
+    // UDP: UL=UDP2.0, US=uUDP2.0(규칙 동일), NL=UDP3.0. 파트 체계는 SIP와 공용(Ordering Info 문서).
+    private static readonly string[] Udp2Prefixes = ["UL", "US"];
+    private static readonly string[] Udp3Prefixes = ["NL"];
 
     // MDL 접두(ModulePrefixes) 뒤 2글자가 RC/4C면 Module 모양의 Comp 파트(Comp_MDL)다.
     private static readonly string[] CompMdlInfixes = ["RC", "4C"];
@@ -56,6 +62,16 @@ public static class PartClassifier
         if (SipPrefixes.Contains(prefix))
         {
             return PartClass.Sip;
+        }
+
+        if (Udp2Prefixes.Contains(prefix))
+        {
+            return PartClass.Udp2;
+        }
+
+        if (Udp3Prefixes.Contains(prefix))
+        {
+            return PartClass.Udp3;
         }
 
         return PartClass.Unknown;

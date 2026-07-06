@@ -26,6 +26,9 @@ public static class SipMarking
 
     // 검색 PID(searchedPid) 기준으로 그리드 한 행(rowProductId)의 Marking을 만든다.
     // base(==PID): Compute(PID). 변형(PID + "-" + MFGID): "{MFGID 3-4자 용량} " + Compute(PID).
+    // 버전별 변형 규칙은 PID 접두로 파생한다(호출부 분기 실수 방지).
+    //   UDP3.0(NL): 용량 뒤 MFGID 2번째 글자(속도 P/N) 추가. 예: TPCGA00 → "CGP {base}".
+    //   uUDP2.0(US): 공백 없이 붙인다. 예: TNCGA00 → "CG{base}".
     // PID 소속이 아니거나(끝이 '-'가 아닌 00/0J/0S 등) PID가 예외면 "" → 건드리지 않음.
     public static string RowMarking(string searchedPid, string rowProductId)
     {
@@ -53,7 +56,11 @@ public static class SipMarking
             var mfgid = rowId[prefix.Length..];
             if (mfgid.Length >= 4)
             {
-                return $"{mfgid.Substring(2, 2)} {baseMarking}";
+                var capacity = mfgid.Substring(2, 2);
+                var head = pid.StartsWith("NL", StringComparison.Ordinal) ? capacity + mfgid[1] : capacity;
+                return pid.StartsWith("US", StringComparison.Ordinal)
+                    ? head + baseMarking
+                    : $"{head} {baseMarking}";
             }
         }
 

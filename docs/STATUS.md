@@ -1,6 +1,14 @@
 # STATUS
 
-최종 갱신: 2026-06-26
+최종 갱신: 2026-07-06
+
+## 최근 반영 — 2026-07-06 (실기 확인됨)
+
+- **UDP 분류 추가**: UDP2.0/uUDP2.0(`UL/US`→`PartClass.Udp2`, 규칙 동일), UDP3.0(`NL`→`PartClass.Udp3`). SIP 워크플로 재사용, 규칙만 추가. 상세: [ARCHITECTURE.md](ARCHITECTURE.md).
+  - 품목정보: Y/N/Y/제품폐기창고 + Turn Key는 파트별 계산(대시 제외 12·13번째 동일→Y, `UdpRules.ComputeTurnKey`) + 품목특별속성(매핑 `global.udpSpecialAttributes`, 기본 `0M/0R/0Y`→RMA(자산)/RMA(비자산)/재고 RETEST).
+  - MFGID 변형 행: BIN관리/TurnKey=N, **조립입고는 미선택**(SIP와 다름). 변형 Marking: UL=2자 용량+공백(SIP 동일), US=2자 용량+공백 없음, NL=용량+속도(P/N) 3자+공백.
+  - BIN: 공정 M030. 2.0계열=Normal-1→Normal-2(`UDP_Normal_{용량}` 동일 2행, TH Normal/Normal), 3.0=Normal-1→Special-1(`UDP3.0_Normal/Special_{용량}`, TH H/Y). 행 템플릿은 `categories.udp2/udp3` 설정 경유(다른 분류와 동일 패턴), 설정 GUI에 UDP2.0/UDP3.0 탭 추가.
+  - 실기 테스트 통과(2026-07-06). UDP 변형 행의 조립입고 블랭크 저장도 검증 경고 없이 정상 확인.
 
 ## 현재 기준점
 
@@ -76,12 +84,12 @@
 ```powershell
 dotnet build .\src\UnimesAutomation\UnimesAutomation.csproj -c Release
 dotnet test .\tests\UnimesAutomation.Tests\UnimesAutomation.Tests.csproj -c Release --no-restore
-dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\dist
+dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\publish
 ```
 
 현재 단위 테스트 기준:
 
-- 73개 통과 (DRAM/SSD/SIP 분류 + Marking/BIN 규칙 + 결과 워크북 + 엑셀 import/추출)
+- 107개 통과 (DRAM/SSD/SIP/UDP 분류 + Marking/BIN 규칙 + 결과 워크북 + 엑셀 import/추출)
 - 실패 0개
 
 ## 핵심 동작
@@ -148,5 +156,5 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 - UI Automation 기반이라 화면에 보이는 것과 UIA 트리가 다를 수 있다.
 - 실패 분석은 최신 `logs/run_*.log`, 대응 스크린샷, `logs/ui_dump_*.txt` 순서로 한다.
-- `logs/`, `screenshots/`, `output/`, `bin/`, `obj/`, `dist/`는 생성물이며 git 추적 대상이 아니다.
+- `logs/`, `screenshots/`, `output/`, `bin/`, `obj/`, `publish/`는 생성물이며 git 추적 대상이 아니다.
 - `appsettings.json`은 로컬 설정 파일이며 git 추적 대상이 아니다.

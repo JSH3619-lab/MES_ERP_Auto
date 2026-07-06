@@ -59,6 +59,8 @@ GUI에서는 읽기 전용 토글을 제공하지 않는다. 실행 직전 실�
 |---|---|
 | `dramModule` / `dramComp` | DRAM Module/Comp별 품목정보와 BIN 정보 기본값 |
 | `ssd` | SSD 품목정보와 B0/R0별 BIN 정보 기본값 |
+| `sip` | SIP 품목정보와 BIN 정보 기본값 (공정 기본 `M030`) |
+| `udp2` / `udp3` | UDP2.0·uUDP2.0(`UL/US`) / UDP3.0(`NL`) 품목정보와 BIN 정보 기본값 (공정 기본 `M030`). Turn Key는 설정값 대신 파트별 계산(대시 제외 12·13번째 동일→Y). BIN ID는 용량으로 산출 — udp3는 행 BIN Type이 `Special` 계열이면 `UDP3.0_Special_{용량}` |
 | `itemInfo.binManage` / `itemInfo.turnKey` / `itemInfo.assemblyIn` | 품목정보관리 셀 목표값. SSD는 `assemblyIn`을 빈 값으로 두어 조립입고를 건드리지 않는다 |
 | `itemInfo.defectWarehouse` | 분류별 불량창고 목표값 |
 | `binInfo.processSearchKey` 또는 `b0BinInfo/r0BinInfo.processSearchKey` | 공정 검색 키. DRAM 기본 `M050`/`C010`, SSD 기본 `M020` |
@@ -70,3 +72,4 @@ GUI에서는 읽기 전용 토글을 제공하지 않는다. 실행 직전 실�
 | `itemInfoMenuName` | 대상 메뉴. 기본 `품목정보관리` |
 | `binInfoMenuName` | 대상 메뉴. 기본 `품목별 BIN 정보 관리` |
 | `recoveryPart` | **기파트.** 미존재 Part 경고 후 열린 `고객사PartID PopUp`에서 키보드 복구에 사용할 정상 Part. 기본 `RMRDAG58A1B-GPWRRWM7` |
+| `udpSpecialAttributes` | UDP 품목특별속성 매핑: PID 끝 2글자 → 콤보 선택값. 기본 `{"0M":"RMA(자산)","0R":"RMA(비자산)","0Y":"재고 RETEST"}`. 매핑에 없으면 미선택. 설정 GUI `고급`에서 편집 |

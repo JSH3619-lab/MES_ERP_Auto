@@ -38,6 +38,8 @@ public sealed class RootConfig
         PartClass.Comp or PartClass.CompMdl => Categories.DramComp.ItemInfo,
         PartClass.Ssd => Categories.Ssd.ItemInfo,
         PartClass.Sip => Categories.Sip.ItemInfo,
+        PartClass.Udp2 => Categories.Udp2.ItemInfo,
+        PartClass.Udp3 => Categories.Udp3.ItemInfo,
         _ => null
     };
 
@@ -209,6 +211,12 @@ public sealed class CategoriesConfig
 
     [JsonPropertyName("sip")]
     public CategoryConfig Sip { get; set; } = CategoryConfig.DefaultSip();
+
+    [JsonPropertyName("udp2")]
+    public CategoryConfig Udp2 { get; set; } = CategoryConfig.DefaultUdp2();
+
+    [JsonPropertyName("udp3")]
+    public CategoryConfig Udp3 { get; set; } = CategoryConfig.DefaultUdp3();
 }
 
 public sealed class CategoryConfig
@@ -243,6 +251,37 @@ public sealed class CategoryConfig
             [
                 new BinRowConfig { ProcessName = "M030", BinType = "Normal-1", RetestNo = "0", BinComplete = "", RetestTh = "Normal" },
                 new BinRowConfig { ProcessName = "M030", BinType = "Normal-2", RetestNo = "1", BinComplete = "Y", RetestTh = "Y" }
+            ]
+        }
+    };
+
+    // UDP2.0/uUDP2.0(UL/US) 품목정보는 SIP와 동일. Turn Key는 파트별 계산으로 덮어쓴다(UdpRules.ComputeTurnKey).
+    // BIN: 공정 M030, Normal-1 → Normal-2, BIN ID는 두 행 동일(UDP_Normal_{용량}, 용량으로 산출).
+    public static CategoryConfig DefaultUdp2() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "제품 폐기창고" },
+        BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M030",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M030", BinType = "Normal-1", RetestNo = "0", BinComplete = "", RetestTh = "Normal" },
+                new BinRowConfig { ProcessName = "M030", BinType = "Normal-2", RetestNo = "1", BinComplete = "Y", RetestTh = "Normal" }
+            ]
+        }
+    };
+
+    // UDP3.0(NL): Normal-1 → Special-1. BIN ID는 행 타입으로 산출(UDP3.0_Normal/UDP3.0_Special_{용량}).
+    public static CategoryConfig DefaultUdp3() => new()
+    {
+        ItemInfo = new ItemInfoValues { DefectWarehouse = "제품 폐기창고" },
+        BinInfo = new BinInfoValues
+        {
+            ProcessSearchKey = "M030",
+            Rows =
+            [
+                new BinRowConfig { ProcessName = "M030", BinType = "Normal-1", RetestNo = "0", BinComplete = "", RetestTh = "H" },
+                new BinRowConfig { ProcessName = "M030", BinType = "Special-1", RetestNo = "1", BinComplete = "Y", RetestTh = "Y" }
             ]
         }
     };
@@ -294,6 +333,15 @@ public sealed class GlobalConfig
 {
     [JsonPropertyName("recoveryPart")]
     public string RecoveryPart { get; set; } = "RMRDAG58A1B-GPWRRWM7";
+
+    // UDP 품목특별속성: PID 끝 2글자 → 콤보 선택값. 매핑에 없으면 미선택(건드리지 않음).
+    [JsonPropertyName("udpSpecialAttributes")]
+    public Dictionary<string, string> UdpSpecialAttributes { get; set; } = new()
+    {
+        ["0M"] = "RMA(자산)",
+        ["0R"] = "RMA(비자산)",
+        ["0Y"] = "재고 RETEST"
+    };
 
     [JsonPropertyName("itemInfoMenuName")]
     public string ItemInfoMenuName { get; set; } = "품목정보관리";
