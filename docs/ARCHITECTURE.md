@@ -27,13 +27,13 @@
 1. `Program.Main`이 설정을 로드하고 로그/스크린샷 경로를 준비한다.
 2. 일반 실행은 `MainForm` GUI를 띄운다. `--dump-only`는 GUI 없이 `UnimesApp`을 바로 실행한다.
 3. GUI에서 작업 범위(`품목정보관리만`, `BIN 정보 관리만`, `둘 다`)와 Part No 목록을 받는다.
-4. 실행 버튼이 `UnimesApp.RunAsync`를 호출하고, UNIMES 창에 attach 또는 launch한다.
-5. 로그인 화면이면 자동 로그인한다. 로그인 후 Continue 팝업은 직접 조작하지 않고 자동 소멸에 맡긴다.
+4. 실행 버튼이 `UnimesApp.RunAsync`를 호출하고, UNIMES 창에 attach 또는 launch한다. 창은 아직 없지만 UNIMES 시작 프로세스가 있으면 중복 실행하지 않고 창을 기다린다.
+5. 로그인 화면이면 자동 로그인한다. 로그인 실패 의심 팝업은 로그인 화면이 실제로 남아 있을 때만 실패 처리한다. 로그인 후 Continue 팝업은 직접 조작하지 않고 자동 소멸에 맡긴다.
 6. 선택 범위에 따라 `품목정보관리`와 `품목별 BIN 정보 관리`를 순서대로 실행한다.
 7. 결과 xlsx를 `output/`에 저장하고 완료 요약을 표시한다.
    - `품목정보관리만`, `BIN 정보 관리만`: 해당 작업 종료 후 완료창 1회.
    - `둘 다`: `품목정보관리` 중간 완료창 없이 BIN까지 끝낸 뒤 통합 완료창 1회.
-8. 실행 중 정지 요청은 `CancellationToken`으로 전달되어 Part/메뉴 탐색 루프의 안전 지점에서 중단된다.
+8. 실행 중 정지 요청은 `CancellationToken`으로 전달되어 Part/메뉴 탐색 루프의 안전 지점에서 중단된다. 실행 버튼 더블클릭으로 즉시 정지되는 것을 막기 위해 실행 후 1.5초 이내 정지 클릭은 무시한다.
 
 ## 창 식별
 
@@ -52,6 +52,7 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 - ID/PW 입력칸은 같은 행의 좌/우 Edit로 판단한다.
 - `Try again`은 서버 응답 오류 문구와 상단 `Try again` 링크가 같이 보이고, 서버 선택 영역의 `UNIMES`가 없는 화면일 때만 처리한다.
+- 로그인 실패 의심 팝업이 있어도 로그인 화면이 남아 있지 않으면 로그인 후 안내 팝업으로 보고 실패 처리하지 않는다.
 - 언어/시스템은 이미 원하는 값이면 건드리지 않는다.
 - Continue 팝업은 UIA에서 안정적으로 감지되지 않아 자동 조작하지 않는다. 팝업이 자동으로 사라진 뒤 메인 화면이 감지되면 바로 다음 단계로 진행한다.
 
@@ -61,7 +62,7 @@ MES와 ERP는 프로세스/클래스가 같아서 제목으로 구분한다.
 
 분류 prefix는 DRAM Module=`RM/TM/BM/CM/ZM`, DRAM Comp=`RC/TC/BC/CC/ZC`, SSD=`DA/DE`, SIP=`SN`, UDP2.0/uUDP2.0=`UL/US`(`PartClass.Udp2`), UDP3.0=`NL`(`PartClass.Udp3`)이다. SSD 품목정보는 BIN 관리/Turn Key/불량창고만 처리하고 조립입고 공정이동여부는 건드리지 않는다.
 
-Module 접두(`RM/TM/BM/CM/ZM`) 뒤 2글자가 `RC` 또는 `4C`면 Module 모양의 Comp 파트(`PartClass.CompMdl`, 이하 Comp_MDL)로 분류한다. 품목정보관리는 DRAM Comp와 동일 카테고리(TurnKey/조립입고/불량창고)를 쓴다.
+Module 접두(`RM/TM/BM/CM/ZM`) 뒤 2글자가 `RC` 또는 `4C`면 Module 모양의 Comp 파트(`PartClass.CompMdl`, 이하 Comp_MDL)로 분류한다. 품목정보관리는 DRAM Module과 동일 카테고리(TurnKey/조립입고/불량창고)를 써서 불량창고를 `제품 폐기창고`로 설정한다.
 
 SIP는 BIN/TurnKey/조립입고/불량창고(=DRAM Module과 동일)에 더해 `Marking` 셀을 채운다. base 행은 PID 파생값(`SipMarking.Compute`), 조회 시 함께 뜨는 MFGID 변형 행(`품목ID`가 `PID + "-"`로 시작)은 `"{MFGID 용량} {base}"`로 **Marking만** 입력하고 다른 셀은 건드리지 않는다. `PID + "-"` 앵커로 `...0J/0S/00` 같은 다른 파트는 배제. PID 끝 2글자가 `0S/0G/0J/0K`면 Marking 생략.
 

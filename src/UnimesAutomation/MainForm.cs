@@ -43,6 +43,7 @@ public sealed class MainForm : Form
     private readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None };
     private bool _running;
     private CancellationTokenSource? _cts;
+    private DateTime _runStartedUtc;
     private readonly Image _logo = LoadLogo();
 
     public MainForm(RootConfig config, RuntimePaths paths, SimpleLogger logger, ScreenshotService screenshots, CommandLineOptions options, string appSettingsPath)
@@ -506,6 +507,7 @@ public sealed class MainForm : Form
 
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
+        _runStartedUtc = DateTime.UtcNow;
         SetRunning(true);
         try
         {
@@ -569,6 +571,13 @@ public sealed class MainForm : Form
     {
         if (_cts is null || _cts.IsCancellationRequested)
         {
+            return;
+        }
+
+        // 실행 버튼이 정지 버튼으로 바뀌는 토글이라 더블클릭이 곧바로 정지가 되는 것을 방지
+        if (DateTime.UtcNow - _runStartedUtc < TimeSpan.FromSeconds(1.5))
+        {
+            _logger.Info("실행 직후의 정지 클릭은 오클릭으로 보고 무시합니다.");
             return;
         }
 

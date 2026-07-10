@@ -1,6 +1,12 @@
 # STATUS
 
-최종 갱신: 2026-07-06
+최종 갱신: 2026-07-10
+
+## 최근 반영 — 2026-07-10
+
+- **Comp_MDL 품목정보 수정**: `RM/TM/BM/CM/ZM` 뒤에 `RC` 또는 `4C`가 오는 파트는 특수 BIN 규칙을 위해 `PartClass.CompMdl` 분류를 유지하되, 품목정보는 DRAM Module 설정을 사용한다. 불량창고는 `제품 폐기창고`다.
+- **실행 버튼 더블클릭 보호**: 실행 직후 1.5초 이내의 정지 클릭을 오클릭으로 보고 무시한다.
+- **UNIMES 시작/로그인 보정**: 시작 프로세스가 이미 있으면 중복 실행하지 않고 창을 기다린다. 로그인 실패 의심 팝업은 로그인 화면이 실제로 남아 있을 때만 실패 처리한다.
 
 ## 최근 반영 — 2026-07-06 (실기 확인됨)
 
@@ -89,7 +95,7 @@ dotnet publish .\src\UnimesAutomation\UnimesAutomation.csproj -c Release -r win-
 
 현재 단위 테스트 기준:
 
-- 107개 통과 (DRAM/SSD/SIP/UDP 분류 + Marking/BIN 규칙 + 결과 워크북 + 엑셀 import/추출)
+- 118개 통과 (DRAM/SSD/SIP/UDP 분류 + Marking/BIN 규칙 + 결과 워크북 + 엑셀 import/추출)
 - 실패 0개
 
 ## 핵심 동작

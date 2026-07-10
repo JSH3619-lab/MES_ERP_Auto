@@ -38,6 +38,9 @@ public sealed partial class UnimesApp
     // 정상 플로우와 무관한 팝업(예: 저장 검증 경고)을 감지하면 사유를 담고 전체 런을 중단한다.
     private string? _abortReason;
 
+    // 로그인 실패 의심 팝업을 무시할 때 경고·스크린샷을 1회만 남기기 위한 플래그
+    private bool _loginNoticePopupWarned;
+
     private void ThrowIfCancellationRequested(string context)
     {
         if (!_cancel.IsCancellationRequested)
@@ -93,6 +96,10 @@ public sealed partial class UnimesApp
             {
                 throw new InvalidOperationException(
                     "launchMode=attach 인데 로그인된 UNIMES 창을 찾지 못했습니다. UNIMES에 먼저 로그인하세요.");
+            }
+            else if (IsUnimesStartupInProgress())
+            {
+                _logger.Info("UNIMES 시작 프로세스가 이미 실행 중입니다. 재실행하지 않고 창을 기다립니다.");
             }
             else
             {
@@ -1769,11 +1776,33 @@ public sealed partial class UnimesApp
         }
 
         var message = ReadMessageText(dialog);
+
+        // 진짜 로그인 실패라면 로그인 창이 열린 채로 남는다. 로그인 창이 없다면
+        // 로그인 성공 후 뜨는 안내 팝업(Continue 등)일 가능성이 크므로 실패로 판정하지 않는다.
+        if (!FindTopLevelWindows().Any(window => IsUnimesCandidate(window) && IsLoginScreen(window)))
+        {
+            if (!_loginNoticePopupWarned)
+            {
+                _loginNoticePopupWarned = true;
+                _screenshots.CaptureElement(dialog, "login_notice_ignored");
+                _logger.Warn($"로그인 실패 의심 팝업이 있으나 로그인 창이 없어 실패로 판정하지 않습니다. message='{message}'");
+            }
+
+            return;
+        }
+
         _screenshots.CaptureElement(dialog, "login_failed");
         var ok = FindButtonByAnyName(dialog, ["확인", "OK"]);
         if (ok is not null)
         {
-            ClickElement(ok, "login failure confirm");
+            try
+            {
+                ClickElement(ok, "login failure confirm");
+            }
+            catch (System.Exception ex)
+            {
+                _logger.Warn($"로그인 실패 팝업 확인 버튼 클릭 실패(무시하고 실패 처리 계속): {ex.Message}");
+            }
         }
 
         throw new InvalidOperationException(
@@ -2539,6 +2568,27 @@ public sealed partial class UnimesApp
             : "(unavailable)";
 
         return $"type='{controlType}', name='{name}', automationId='{automationId}', rect='{rectText}'";
+    }
+
+    // 창은 아직 없지만 시작 중인 UNIMES 프로세스가 있는지 확인한다.
+    // Shell은 ERP도 같은 프로세스명이라 시작 중 판단에서 제외한다(절대 규칙 1).
+    private bool IsUnimesStartupInProgress()
+    {
+        return _config.App.ProcessNameHints
+            .Where(hint => !string.IsNullOrWhiteSpace(hint) &&
+                           !hint.Contains("Shell", StringComparison.OrdinalIgnoreCase))
+            .Any(hint => Process.GetProcesses().Any(process =>
+            {
+                try
+                {
+                    return !IsOwnProcess(process.Id, process.ProcessName) &&
+                           process.ProcessName.Contains(hint, StringComparison.OrdinalIgnoreCase);
+                }
+                catch
+                {
+                    return false;
+                }
+            }));
     }
 
     private void LogProcessHints()
