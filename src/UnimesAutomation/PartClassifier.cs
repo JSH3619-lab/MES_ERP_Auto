@@ -79,9 +79,23 @@ public static class PartClassifier
 
     // 더미 Part: PID(2번째 '-' 전) 리터럴 끝 2글자가 "00".
     // 끝쪽 append가 가변이라 위치가 아닌 리터럴 끝으로 판정한다.
+    // DRAM Module 한정: 파트번호 마지막 2글자가 "B0"/"R0"여도 더미(Comp/Comp_MDL/SSD 등 제외).
     public static bool IsDummy(string partNo)
     {
-        return ExtractPid((partNo ?? "").Trim()).EndsWith("00", StringComparison.Ordinal);
+        var value = (partNo ?? "").Trim();
+        if (ExtractPid(value).EndsWith("00", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (Classify(value) == PartClass.Module)
+        {
+            var upper = value.ToUpperInvariant();
+            return upper.EndsWith("B0", StringComparison.Ordinal)
+                || upper.EndsWith("R0", StringComparison.Ordinal);
+        }
+
+        return false;
     }
 
     public static string ExtractPid(string partNo)
