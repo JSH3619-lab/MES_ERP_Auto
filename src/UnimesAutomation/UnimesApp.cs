@@ -218,7 +218,8 @@ public sealed partial class UnimesApp
 
             if (itemResults.Count > 0 || binResults.Count > 0)
             {
-                var outputPath = ResultWorkbook.Write(_paths.OutputDirectory, _paths.Timestamp, itemResults, binResults);
+                var resultTimestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var outputPath = ResultWorkbook.Write(_paths.OutputDirectory, resultTimestamp, itemResults, binResults);
                 _logger.Info($"결과 리포트 저장: {outputPath}");
                 ShowCompletionDialog(itemResults, binResults, outputPath);
             }
